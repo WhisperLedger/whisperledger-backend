@@ -10,10 +10,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && (
-        request.auth.token.admin == true ||
-        request.auth.token.email == "agarwaltanmay401@gmail.com"
-      );
+      return signedIn() && request.auth.token.email == "agarwaltanmay401@gmail.com";
     }
     
     // Lock down user collections (profile, expenses, notifications, settings)
@@ -36,6 +33,19 @@ service cloud.firestore {
         allow read, write: if isOwner(userId) || isAdmin();
       }
     }
+
+    // Admin dashboard recovery path for ledgers whose parent user profile was
+    // never created. Collection-group queries require an explicit recursive
+    // rule even though normal per-user expense access is defined above.
+    match /{path=**}/expenses/{expenseId} {
+      allow read: if isAdmin();
+    }
+
+    // Admin user-monitoring view aggregates notification read state across
+    // accounts. Normal users remain limited to their own notification inbox.
+    match /{path=**}/notifications/{notificationId} {
+      allow read: if isAdmin();
+    }
     
     // Lock down statement downloads requests
     match /statement_requests/{requestId} {
@@ -54,6 +64,21 @@ service cloud.firestore {
 
     match /broadcast_history/{broadcastId} {
       allow read, write: if isAdmin();
+    }
+
+    match /subscription_requests/{requestId} {
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if (signedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /compliance_audit_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /app_config/{configId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
 
     match /mail/{mailId} {

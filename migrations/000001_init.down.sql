@@ -1,0 +1,8 @@
+DROP TABLE IF EXISTS settlements;
+DROP TABLE IF EXISTS receivables;
+DROP TABLE IF EXISTS expense_splits;
+DROP TABLE IF EXISTS expenses;
+DROP TABLE IF EXISTS household_members;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS fk_users_household;
+DROP TABLE IF EXISTS households;
+DROP TABLE IF EXISTS users;

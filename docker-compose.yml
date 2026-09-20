@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: whisperledger-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: whisperledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d whisperledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whisperledger-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgres://postgres:password123@postgres:5432/whisperledger?sslmode=disable
+      JWT_SECRET: super-secret-production-whisperledger-key-2026
+      JWT_ACCESS_EXPIRY_HOURS: 24
+      JWT_REFRESH_EXPIRY_DAYS: 30
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173,https://whisperledger.com,https://admin.whisperledger.com
+
+volumes:
+  pgdata:

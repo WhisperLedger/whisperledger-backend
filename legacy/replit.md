@@ -34,9 +34,9 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Storage**: Firebase + AsyncStorage
 
 ### Admin Dashboard
-- **Path**: `admin-dashboard/`
-- **Type**: HTML/Tailwind/JS
-- **Preview path**: `/admin-dashboard/index.html`
+- **Canonical path**: `../whisperledger-website/admin/`
+- **Type**: HTML/CSS/JavaScript with Firebase Authentication and Firestore listeners
+- **Purpose**: Notifications, user controls, behavior insights, live user monitoring, and support case management
 
 ### API Server
 - **Path**: `api-server/`

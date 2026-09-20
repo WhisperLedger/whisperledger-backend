@@ -116,6 +116,17 @@ async function main() {
   const expensesRef = collection(db, `users/${user.uid}/expenses`);
   const batch = writeBatch(db);
 
+  // Ensure the parent profile exists. Firestore permits subcollections under a
+  // missing parent document, which makes the ledger invisible to dashboards
+  // that enumerate the top-level users collection.
+  batch.set(doc(db, "users", user.uid), {
+    uid: user.uid,
+    email: user.email || email,
+    displayName: user.displayName || "WhisperLedger User",
+    status: "active",
+    updatedAt: Date.now(),
+  }, { merge: true });
+
   console.log(`Preparing batch for ${expenses.length} expenses...`);
   for (const [date, amount, note, categoryId, paymentMode] of expenses) {
     const docRef = doc(expensesRef);
@@ -139,4 +150,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

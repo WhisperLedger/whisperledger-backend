@@ -1,0 +1,36 @@
+name: Backend CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run unit tests
+        run: go test -v ./...
+
+      - name: Build application binary
+        run: go build -o server ./cmd/api
+
+      - name: Build migration binary
+        run: go build -o migrate ./cmd/migrate
+
+      - name: Verify Docker build
+        run: docker build -t whisperledger-api:test .
