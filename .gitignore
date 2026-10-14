@@ -49,6 +49,9 @@ Thumbs.db
 .local/
 
 # Local generated folders and files
+.env
+.env.*
+!.env.example
 android/
 *.apk
 *.log
@@ -60,3 +63,5 @@ static-build/
 whisperledger-app/static-build/
 whisperledger-app/scratch/
 bin/
+.neon
+

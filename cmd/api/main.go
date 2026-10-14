@@ -22,11 +22,14 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid service configuration: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Logger
 	var zapLog *zap.Logger
-	var err error
 	if cfg.Environment == "production" {
 		zapLog, err = zap.NewProduction()
 	} else {
@@ -49,19 +52,10 @@ func main() {
 
 	dbPool, err := postgres.NewDB(ctx, cfg.DatabaseURL)
 	if err != nil {
-		zapLog.Warn("Database connection failed, will attempt again on requests or docker spin-up", zap.Error(err))
-	} else {
-		zapLog.Info("Successfully connected to PostgreSQL database cluster")
-
-		// Apply database schema migrations if available
-		if migrationSQL, err := os.ReadFile("migrations/000001_init.up.sql"); err == nil {
-			if _, mErr := dbPool.Exec(context.Background(), string(migrationSQL)); mErr != nil {
-				zapLog.Warn("Auto-migration schema notices", zap.Error(mErr))
-			} else {
-				zapLog.Info("PostgreSQL relational schema verified up-to-date")
-			}
-		}
+		zapLog.Fatal("Database connection failed", zap.Error(err))
 	}
+	defer dbPool.Close()
+	zapLog.Info("Successfully connected to PostgreSQL database cluster")
 
 	// Security & Token Maker
 	tokenMaker := token.NewTokenMaker(cfg.JWTSecret, cfg.AccessTokenExpiry, cfg.RefreshTokenExpiry)

@@ -1,89 +1,113 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
-    }
+    function signedIn() { return request.auth != null; }
 
-    function isOwner(userId) {
-      return signedIn() && request.auth.uid == userId;
-    }
-
+    // Replace this bootstrap check with a Firebase custom claim (`admin: true`)
+    // once the claims-provisioning service is deployed.
     function isAdmin() {
-      return signedIn() && request.auth.token.email == "agarwaltanmay401@gmail.com";
+      return signedIn()
+        && request.auth.token.email == "agarwaltanmay401@gmail.com"
+        && request.auth.token.email_verified == true;
     }
-    
-    // Lock down user collections (profile, expenses, notifications, settings)
+
+    function isOwner(userId) { return signedIn() && request.auth.uid == userId; }
+
+    function isHouseholdMember(householdId) {
+      return signedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberUids;
+    }
+
+    function isHouseholdAdmin(householdId) {
+      return isHouseholdMember(householdId)
+        && get(/databases/$(database)/documents/households/$(householdId)).data.members[request.auth.uid].role == "admin";
+    }
+
+    function isSafeProfileUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        "name", "displayName", "username", "bio", "avatarUri", "avatarResizeMode",
+        "email", "emailVerified", "pendingVerification", "verifiedAt", "lastActive",
+        "pushToken", "expoPushToken", "fcmToken", "updatedAt"
+      ]);
+    }
+
     match /users/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
-      
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasOnly([
+          "uid", "name", "displayName", "username", "bio", "avatarUri", "avatarResizeMode",
+          "email", "emailVerified", "pendingVerification", "verifiedAt", "lastActive",
+          "pushToken", "expoPushToken", "fcmToken", "updatedAt"
+        ]);
+      // Users cannot grant their own Pro entitlement or alter account status.
+      allow update: if (isOwner(userId) && isSafeProfileUpdate()) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /expenses/{expenseId} { allow read, write: if isOwner(userId) || isAdmin(); }
+      match /notifications/{notificationId} { allow read, write: if isOwner(userId) || isAdmin(); }
+      match /settings/{settingId} { allow read, write: if isOwner(userId) || isAdmin(); }
+      match /budgets/{budgetId} { allow read, write: if isOwner(userId) || isAdmin(); }
+    }
+
+    // Invite codes only locate a household. A joiner can add themselves as a
+    // member but cannot set their own role to admin.
+    match /households/{householdId} {
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.memberUids.size() == 1
+        && request.auth.uid in request.resource.data.memberUids
+        && request.resource.data.members[request.auth.uid].role == "admin";
+      // A direct document lookup is the invite-code join handshake. Listing
+      // households remains limited to members, so users cannot enumerate them.
+      allow get: if signedIn();
+      allow list: if isHouseholdMember(householdId) || isAdmin();
+      allow update: if isHouseholdAdmin(householdId) || isAdmin()
+        || (
+          !isHouseholdMember(householdId)
+          && request.auth.uid in request.resource.data.memberUids
+          && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+          && request.resource.data.members[request.auth.uid].role == "member"
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["members", "memberUids"])
+        );
+      allow delete: if isHouseholdAdmin(householdId) || isAdmin();
+
       match /expenses/{expenseId} {
-        allow read, write: if isOwner(userId) || isAdmin();
-      }
-      
-      match /notifications/{notificationId} {
-        allow read, write: if isOwner(userId) || isAdmin();
-      }
-      
-      match /settings/{settingId} {
-        allow read, write: if isOwner(userId) || isAdmin();
-      }
-      
-      match /budgets/{budgetId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read: if isHouseholdMember(householdId) || isAdmin();
+        allow create: if isHouseholdMember(householdId)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.householdId == householdId;
+        allow update, delete: if (isHouseholdMember(householdId)
+          && resource.data.createdBy == request.auth.uid) || isHouseholdAdmin(householdId) || isAdmin();
       }
     }
 
-    // Admin dashboard recovery path for ledgers whose parent user profile was
-    // never created. Collection-group queries require an explicit recursive
-    // rule even though normal per-user expense access is defined above.
-    match /{path=**}/expenses/{expenseId} {
-      allow read: if isAdmin();
-    }
+    match /{path=**}/expenses/{expenseId} { allow read: if isAdmin(); }
+    match /{path=**}/notifications/{notificationId} { allow read: if isAdmin(); }
 
-    // Admin user-monitoring view aggregates notification read state across
-    // accounts. Normal users remain limited to their own notification inbox.
-    match /{path=**}/notifications/{notificationId} {
-      allow read: if isAdmin();
-    }
-    
-    // Lock down statement downloads requests
     match /statement_requests/{requestId} {
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow read: if (signedIn() && resource.data.userId == request.auth.uid) || isAdmin();
       allow update, delete: if isAdmin();
     }
-    
 
-    // Lock down support cases (raised by FAQ panel)
     match /support_cases/{caseId} {
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow read: if (signedIn() && resource.data.userId == request.auth.uid) || isAdmin();
       allow update, delete: if isAdmin();
     }
 
-    match /broadcast_history/{broadcastId} {
-      allow read, write: if isAdmin();
-    }
-
+    // Intent records are not payment or entitlement proof.
     match /subscription_requests/{requestId} {
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == "pending";
       allow read: if (signedIn() && resource.data.userId == request.auth.uid) || isAdmin();
       allow update, delete: if isAdmin();
     }
 
-    match /compliance_audit_logs/{logId} {
-      allow read, write: if isAdmin();
-    }
-
-    match /app_config/{configId} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
-    }
-
-    match /mail/{mailId} {
-      allow create: if isAdmin();
-      allow read, update, delete: if false;
-    }
+    match /broadcast_history/{broadcastId} { allow read, write: if isAdmin(); }
+    match /compliance_audit_logs/{logId} { allow read, write: if isAdmin(); }
+    match /app_config/{configId} { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /mail/{mailId} { allow create: if isAdmin(); allow read, update, delete: if false; }
   }
 }

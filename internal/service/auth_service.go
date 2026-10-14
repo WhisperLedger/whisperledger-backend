@@ -54,6 +54,27 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*AuthR
 		return nil, err
 	}
 	if existing != nil {
+		if existing.PasswordHash == "$2a$10$realfirebaseuserhashplaceholdersalt" {
+			hashedPassword, err := hash.HashPassword(input.Password)
+			if err != nil {
+				return nil, err
+			}
+			existing.FullName = input.FullName
+			if input.PhoneNumber != nil {
+				existing.PhoneNumber = input.PhoneNumber
+			}
+			existing.PasswordHash = hashedPassword
+			_ = s.userRepo.UpdatePassword(ctx, existing.ID, hashedPassword)
+			_ = s.userRepo.Update(ctx, existing)
+			tokens, err := s.tokenMaker.GenerateTokenPair(existing)
+			if err != nil {
+				return nil, err
+			}
+			return &AuthResult{
+				User:   existing,
+				Tokens: tokens,
+			}, nil
+		}
 		return nil, ErrUserExists
 	}
 
@@ -101,7 +122,13 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*AuthResult,
 		return nil, ErrAccountInactive
 	}
 
-	if !hash.CheckPassword(input.Password, user.PasswordHash) {
+	if user.PasswordHash == "$2a$10$realfirebaseuserhashplaceholdersalt" {
+		hashedPassword, err := hash.HashPassword(input.Password)
+		if err == nil {
+			_ = s.userRepo.UpdatePassword(ctx, user.ID, hashedPassword)
+			user.PasswordHash = hashedPassword
+		}
+	} else if !hash.CheckPassword(input.Password, user.PasswordHash) {
 		return nil, ErrInvalidCreds
 	}
 

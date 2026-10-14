@@ -24,9 +24,16 @@ CREATE TABLE IF NOT EXISTS households (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE users 
-ADD CONSTRAINT fk_users_household 
-FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL;
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_users_household'
+    ) THEN
+        ALTER TABLE users 
+        ADD CONSTRAINT fk_users_household 
+        FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS household_members (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

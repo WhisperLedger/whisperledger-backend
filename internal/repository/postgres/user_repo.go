@@ -91,6 +91,12 @@ func (r *UserRepository) Update(ctx context.Context, u *domain.User) error {
 	return err
 }
 
+func (r *UserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error {
+	query := `UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3`
+	_, err := r.pool.Exec(ctx, query, passwordHash, time.Now().UTC(), id)
+	return err
+}
+
 func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*domain.User, int, error) {
 	countQuery := `SELECT COUNT(*) FROM users`
 	var total int
