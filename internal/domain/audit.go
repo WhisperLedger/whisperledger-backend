@@ -47,3 +47,35 @@ type AdminPlatformMetrics struct {
 	ActiveUsers7Days        int       `json:"active_users_7_days"`
 	GeneratedAt             time.Time `json:"generated_at"`
 }
+
+type SystemLogEntry struct {
+	Timestamp time.Time `json:"timestamp"`
+	Level     string    `json:"level"`
+	Message   string    `json:"message"`
+	Source    string    `json:"source"`
+}
+
+type DailyVolumeStat struct {
+	Date   string  `json:"date"`
+	Amount float64 `json:"amount"`
+	Count  int     `json:"count"`
+}
+
+type CloudTelemetry struct {
+	Service         string            `json:"service"`
+	Region          string            `json:"region"`
+	Revision        string            `json:"revision"`
+	Environment     string            `json:"environment"`
+	Status          string            `json:"status"`
+	UptimeSeconds   int64             `json:"uptime_seconds"`
+	GoVersion       string            `json:"go_version"`
+	MemoryAllocMB   float64           `json:"memory_alloc_mb"`
+	MemorySysMB     float64           `json:"memory_sys_mb"`
+	DBPoolTotal     int32             `json:"db_pool_total"`
+	DBPoolIdle      int32             `json:"db_pool_idle"`
+	DBPoolAcquired  int32             `json:"db_pool_acquired"`
+	DailyVolumes    []DailyVolumeStat `json:"daily_volumes"`
+	RecentLogs      []SystemLogEntry  `json:"recent_logs"`
+	GCPConsoleLinks map[string]string `json:"gcp_console_links"`
+}
+

@@ -26,6 +26,16 @@ func (h *AdminHandler) Metrics(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, http.StatusOK, "platform metrics retrieved", metrics)
 }
 
+func (h *AdminHandler) Telemetry(w http.ResponseWriter, r *http.Request) {
+	telemetry, err := h.adminService.GetCloudTelemetry(r.Context())
+	if err != nil {
+		response.InternalError(w, err.Error())
+		return
+	}
+
+	response.Success(w, http.StatusOK, "cloud telemetry and metrics retrieved", telemetry)
+}
+
 func (h *AdminHandler) Users(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
@@ -38,3 +48,4 @@ func (h *AdminHandler) Users(w http.ResponseWriter, r *http.Request) {
 
 	response.Paginated(w, users, total, limit, offset)
 }
+

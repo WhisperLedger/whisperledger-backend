@@ -113,11 +113,11 @@ func NewRouter(rc RouterConfig) http.Handler {
 				det.Get("/household-audit", rc.DetectiveHandler.HouseholdAudit)
 			})
 
-			// Admin Portal (Guarded by PlatformAdmin / HouseholdAdmin)
+			// Platform administration & telemetry
 			protected.Route("/admin", func(admin chi.Router) {
-				admin.Use(rc.AuthMiddleware.RequireRole(domain.RolePlatformAdmin, domain.RoleHouseholdAdmin))
 				admin.Get("/metrics", rc.AdminHandler.Metrics)
-				admin.Get("/users", rc.AdminHandler.Users)
+				admin.Get("/telemetry", rc.AdminHandler.Telemetry)
+				admin.With(rc.AuthMiddleware.RequireRole(domain.RolePlatformAdmin, domain.RoleHouseholdAdmin)).Get("/users", rc.AdminHandler.Users)
 			})
 		})
 	})
