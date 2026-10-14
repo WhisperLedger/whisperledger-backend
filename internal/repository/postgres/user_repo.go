@@ -21,33 +21,42 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	query := `
-		INSERT INTO users (id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO users (id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id, plan, status, push_ready, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`
 	now := time.Now().UTC()
 	if u.ID == uuid.Nil {
 		u.ID = uuid.New()
+	}
+	if u.Plan == "" {
+		u.Plan = "starter_free"
+	}
+	if u.Status == "" {
+		u.Status = "active"
 	}
 	u.CreatedAt = now
 	u.UpdatedAt = now
 
 	_, err := r.pool.Exec(ctx, query,
 		u.ID, u.Email, u.PasswordHash, u.FullName, u.PhoneNumber, u.AvatarURL,
-		u.Role, u.IsActive, u.HouseholdID, u.CreatedAt, u.UpdatedAt,
+		u.Role, u.IsActive, u.HouseholdID, u.Plan, u.Status, u.PushReady, u.CreatedAt, u.UpdatedAt,
 	)
 	return err
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id, created_at, updated_at
+		SELECT id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id,
+		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), COALESCE(push_ready, false),
+		       created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL,
-		&u.Role, &u.IsActive, &u.HouseholdID, &u.CreatedAt, &u.UpdatedAt,
+		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushReady,
+		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -60,14 +69,17 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id, created_at, updated_at
+		SELECT id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id,
+		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), COALESCE(push_ready, false),
+		       created_at, updated_at
 		FROM users
 		WHERE LOWER(email) = LOWER($1)
 	`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, email).Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL,
-		&u.Role, &u.IsActive, &u.HouseholdID, &u.CreatedAt, &u.UpdatedAt,
+		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushReady,
+		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -81,12 +93,14 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 func (r *UserRepository) Update(ctx context.Context, u *domain.User) error {
 	query := `
 		UPDATE users
-		SET full_name = $1, phone_number = $2, avatar_url = $3, role = $4, is_active = $5, household_id = $6, updated_at = $7
-		WHERE id = $8
+		SET full_name = $1, phone_number = $2, avatar_url = $3, role = $4, is_active = $5, household_id = $6,
+		    plan = $7, status = $8, updated_at = $9
+		WHERE id = $10
 	`
 	u.UpdatedAt = time.Now().UTC()
 	_, err := r.pool.Exec(ctx, query,
-		u.FullName, u.PhoneNumber, u.AvatarURL, u.Role, u.IsActive, u.HouseholdID, u.UpdatedAt, u.ID,
+		u.FullName, u.PhoneNumber, u.AvatarURL, u.Role, u.IsActive, u.HouseholdID,
+		u.Plan, u.Status, u.UpdatedAt, u.ID,
 	)
 	return err
 }
@@ -94,6 +108,12 @@ func (r *UserRepository) Update(ctx context.Context, u *domain.User) error {
 func (r *UserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error {
 	query := `UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3`
 	_, err := r.pool.Exec(ctx, query, passwordHash, time.Now().UTC(), id)
+	return err
+}
+
+func (r *UserRepository) UpdateSubscription(ctx context.Context, id uuid.UUID, plan, status string) error {
+	query := `UPDATE users SET plan = $1, status = $2, updated_at = $3 WHERE id = $4`
+	_, err := r.pool.Exec(ctx, query, plan, status, time.Now().UTC(), id)
 	return err
 }
 
@@ -105,7 +125,9 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*domain
 	}
 
 	query := `
-		SELECT id, email, full_name, phone_number, avatar_url, role, is_active, household_id, created_at, updated_at
+		SELECT id, email, full_name, phone_number, avatar_url, role, is_active, household_id,
+		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), COALESCE(push_ready, false),
+		       created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -121,7 +143,8 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*domain
 		var u domain.User
 		if err := rows.Scan(
 			&u.ID, &u.Email, &u.FullName, &u.PhoneNumber, &u.AvatarURL,
-			&u.Role, &u.IsActive, &u.HouseholdID, &u.CreatedAt, &u.UpdatedAt,
+			&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushReady,
+			&u.CreatedAt, &u.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}

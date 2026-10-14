@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"whisperledger-backend/internal/domain"
 )
@@ -152,5 +153,65 @@ func (s *AdminService) GetCloudTelemetry(ctx context.Context) (*domain.CloudTele
 
 func (s *AdminService) ListUsers(ctx context.Context, limit, offset int) ([]*domain.User, int, error) {
 	return s.userRepo.List(ctx, limit, offset)
+}
+
+func (s *AdminService) UpdateUserSubscription(ctx context.Context, id uuid.UUID, plan, status string) error {
+	return s.userRepo.UpdateSubscription(ctx, id, plan, status)
+}
+
+func (s *AdminService) CreateBroadcastNotification(ctx context.Context, notif *domain.BroadcastNotification) error {
+	if notif.ID == uuid.Nil {
+		notif.ID = uuid.New()
+	}
+	if notif.AppName == "" {
+		notif.AppName = "WhisperLedger"
+	}
+	if notif.DispatchStatus == "" {
+		notif.DispatchStatus = "delivered"
+	}
+	notif.SentAt = time.Now().UTC()
+	notif.CreatedAt = time.Now().UTC()
+
+	query := `
+		INSERT INTO broadcast_history (id, app_name, title, body, image_url, target, target_user_id, type, delivered_count, dispatch_status, sent_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`
+	_, err := s.pool.Exec(ctx, query,
+		notif.ID, notif.AppName, notif.Title, notif.Body, notif.ImageURL,
+		notif.Target, notif.TargetUserID, notif.Type, notif.DeliveredCount,
+		notif.DispatchStatus, notif.SentAt, notif.CreatedAt,
+	)
+	return err
+}
+
+func (s *AdminService) ListBroadcastNotifications(ctx context.Context, limit int) ([]*domain.BroadcastNotification, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	query := `
+		SELECT id, app_name, title, body, COALESCE(image_url, ''), target, target_user_id, type, delivered_count, dispatch_status, sent_at, created_at
+		FROM broadcast_history
+		ORDER BY sent_at DESC
+		LIMIT $1
+	`
+	rows, err := s.pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*domain.BroadcastNotification
+	for rows.Next() {
+		var b domain.BroadcastNotification
+		if err := rows.Scan(
+			&b.ID, &b.AppName, &b.Title, &b.Body, &b.ImageURL, &b.Target,
+			&b.TargetUserID, &b.Type, &b.DeliveredCount, &b.DispatchStatus,
+			&b.SentAt, &b.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		list = append(list, &b)
+	}
+	return list, nil
 }
 

@@ -1,9 +1,13 @@
 package v1
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"whisperledger-backend/internal/domain"
 	"whisperledger-backend/internal/pkg/response"
 	"whisperledger-backend/internal/service"
 )
@@ -49,3 +53,100 @@ func (h *AdminHandler) Users(w http.ResponseWriter, r *http.Request) {
 	response.Paginated(w, users, total, limit, offset)
 }
 
+type updateSubscriptionReq struct {
+	Plan   string `json:"plan"`
+	Status string `json:"status"`
+}
+
+func (h *AdminHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	userID, err := uuid.Parse(idStr)
+	if err != nil {
+		response.BadRequest(w, "invalid user id", nil)
+		return
+	}
+
+	var req updateSubscriptionReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, "invalid request body", nil)
+		return
+	}
+
+	if req.Plan == "" {
+		req.Plan = "starter_free"
+	}
+	if req.Status == "" {
+		req.Status = "active"
+	}
+
+	if err := h.adminService.UpdateUserSubscription(r.Context(), userID, req.Plan, req.Status); err != nil {
+		response.InternalError(w, err.Error())
+		return
+	}
+
+	response.Success(w, http.StatusOK, "user subscription updated successfully", map[string]interface{}{
+		"user_id": userID,
+		"plan":    req.Plan,
+		"status":  req.Status,
+	})
+}
+
+type createNotificationReq struct {
+	AppName        string     `json:"app_name"`
+	Title          string     `json:"title"`
+	Body           string     `json:"body"`
+	ImageURL       string     `json:"image_url"`
+	Target         string     `json:"target"`
+	TargetUserID   *uuid.UUID `json:"target_user_id"`
+	Type           string     `json:"type"`
+	DeliveredCount int        `json:"delivered_count"`
+}
+
+func (h *AdminHandler) CreateNotification(w http.ResponseWriter, r *http.Request) {
+	var req createNotificationReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, "invalid request body", nil)
+		return
+	}
+
+	if req.Title == "" || req.Body == "" {
+		response.BadRequest(w, "title and body are required", nil)
+		return
+	}
+	if req.Target == "" {
+		req.Target = "all"
+	}
+	if req.Type == "" {
+		req.Type = "system"
+	}
+
+	notif := &domain.BroadcastNotification{
+		AppName:        req.AppName,
+		Title:          req.Title,
+		Body:           req.Body,
+		ImageURL:       req.ImageURL,
+		Target:         req.Target,
+		TargetUserID:   req.TargetUserID,
+		Type:           req.Type,
+		DeliveredCount: req.DeliveredCount,
+		DispatchStatus: "delivered",
+	}
+
+	if err := h.adminService.CreateBroadcastNotification(r.Context(), notif); err != nil {
+		response.InternalError(w, err.Error())
+		return
+	}
+
+	response.Success(w, http.StatusCreated, "push notification broadcast recorded successfully", notif)
+}
+
+func (h *AdminHandler) ListNotifications(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	notifications, err := h.adminService.ListBroadcastNotifications(r.Context(), limit)
+	if err != nil {
+		response.InternalError(w, err.Error())
+		return
+	}
+
+	response.Success(w, http.StatusOK, "broadcast notifications retrieved", notifications)
+}
