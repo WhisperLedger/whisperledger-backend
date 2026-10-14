@@ -1,10 +1,14 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -159,6 +163,70 @@ func (s *AdminService) UpdateUserSubscription(ctx context.Context, id uuid.UUID,
 	return s.userRepo.UpdateSubscription(ctx, id, plan, status)
 }
 
+type expoPushMessage struct {
+	To        string                 `json:"to"`
+	Title     string                 `json:"title"`
+	Body      string                 `json:"body"`
+	Sound     string                 `json:"sound"`
+	Priority  string                 `json:"priority"`
+	ChannelID string                 `json:"channelId"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+}
+
+func (s *AdminService) dispatchExpoPush(ctx context.Context, tokens []string, title, body, notifType string, notifID uuid.UUID) int {
+	if len(tokens) == 0 {
+		return 0
+	}
+
+	var messages []expoPushMessage
+	for _, t := range tokens {
+		clean := strings.TrimSpace(t)
+		if clean == "" {
+			continue
+		}
+		messages = append(messages, expoPushMessage{
+			To:        clean,
+			Title:     title,
+			Body:      body,
+			Sound:     "default",
+			Priority:  "high",
+			ChannelID: "default",
+			Data: map[string]interface{}{
+				"type":            notifType,
+				"notification_id": notifID.String(),
+			},
+		})
+	}
+
+	if len(messages) == 0 {
+		return 0
+	}
+
+	payload, err := json.Marshal(messages)
+	if err != nil {
+		return 0
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://exp.host/--/api/v2/push/send", bytes.NewBuffer(payload))
+	if err != nil {
+		return 0
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return len(messages)
+	}
+	return 0
+}
+
 func (s *AdminService) CreateBroadcastNotification(ctx context.Context, notif *domain.BroadcastNotification) error {
 	if notif.ID == uuid.Nil {
 		notif.ID = uuid.New()
@@ -166,11 +234,50 @@ func (s *AdminService) CreateBroadcastNotification(ctx context.Context, notif *d
 	if notif.AppName == "" {
 		notif.AppName = "WhisperLedger"
 	}
-	if notif.DispatchStatus == "" {
-		notif.DispatchStatus = "delivered"
-	}
 	notif.SentAt = time.Now().UTC()
 	notif.CreatedAt = time.Now().UTC()
+
+	// Query target device push tokens from PostgreSQL
+	var tokens []string
+	if notif.Target == "single_user" && notif.TargetUserID != nil {
+		var tok *string
+		err := s.pool.QueryRow(ctx, `SELECT push_token FROM users WHERE id = $1 AND push_token IS NOT NULL AND push_token != ''`, notif.TargetUserID).Scan(&tok)
+		if err == nil && tok != nil && *tok != "" {
+			tokens = append(tokens, *tok)
+		}
+	} else if notif.Target == "pro_only" {
+		rows, err := s.pool.Query(ctx, `SELECT push_token FROM users WHERE plan = 'pro' AND push_token IS NOT NULL AND push_token != ''`)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var tok string
+				if err := rows.Scan(&tok); err == nil && tok != "" {
+					tokens = append(tokens, tok)
+				}
+			}
+		}
+	} else {
+		// Target 'all'
+		rows, err := s.pool.Query(ctx, `SELECT push_token FROM users WHERE push_token IS NOT NULL AND push_token != ''`)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var tok string
+				if err := rows.Scan(&tok); err == nil && tok != "" {
+					tokens = append(tokens, tok)
+				}
+			}
+		}
+	}
+
+	if len(tokens) > 0 {
+		delivered := s.dispatchExpoPush(ctx, tokens, notif.Title, notif.Body, notif.Type, notif.ID)
+		notif.DeliveredCount = delivered
+		notif.DispatchStatus = "delivered"
+	} else {
+		notif.DeliveredCount = 0
+		notif.DispatchStatus = "delivered"
+	}
 
 	query := `
 		INSERT INTO broadcast_history (id, app_name, title, body, image_url, target, target_user_id, type, delivered_count, dispatch_status, sent_at, created_at)
