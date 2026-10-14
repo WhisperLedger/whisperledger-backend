@@ -47,7 +47,7 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `
 		SELECT id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id,
-		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), COALESCE(push_ready, false),
+		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
 		       created_at, updated_at
 		FROM users
 		WHERE id = $1
@@ -55,7 +55,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL,
-		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushReady,
+		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
@@ -70,7 +70,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
 		SELECT id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id,
-		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), COALESCE(push_ready, false),
+		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
 		       created_at, updated_at
 		FROM users
 		WHERE LOWER(email) = LOWER($1)
@@ -78,7 +78,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, email).Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL,
-		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushReady,
+		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
@@ -126,7 +126,7 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*domain
 
 	query := `
 		SELECT id, email, full_name, phone_number, avatar_url, role, is_active, household_id,
-		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), COALESCE(push_ready, false),
+		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
 		       created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
@@ -143,7 +143,7 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*domain
 		var u domain.User
 		if err := rows.Scan(
 			&u.ID, &u.Email, &u.FullName, &u.PhoneNumber, &u.AvatarURL,
-			&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushReady,
+			&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
 			&u.CreatedAt, &u.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
@@ -152,6 +152,12 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*domain
 	}
 
 	return users, total, nil
+}
+
+func (r *UserRepository) UpdatePushToken(ctx context.Context, id uuid.UUID, pushToken string) error {
+	query := `UPDATE users SET push_token = $1, push_ready = true, updated_at = $2 WHERE id = $3`
+	_, err := r.pool.Exec(ctx, query, pushToken, time.Now().UTC(), id)
+	return err
 }
 
 func (r *UserRepository) SetHousehold(ctx context.Context, userID uuid.UUID, householdID *uuid.UUID) error {

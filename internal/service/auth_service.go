@@ -170,3 +170,7 @@ func (s *AuthService) GetUser(ctx context.Context, userID uuid.UUID) (*domain.Us
 	}
 	return user, nil
 }
+
+func (s *AuthService) UpdatePushToken(ctx context.Context, userID uuid.UUID, pushToken string) error {
+	return s.userRepo.UpdatePushToken(ctx, userID, pushToken)
+}

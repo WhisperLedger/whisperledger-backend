@@ -72,12 +72,18 @@ func NewRouter(rc RouterConfig) http.Handler {
 			auth.Group(func(protected chi.Router) {
 				protected.Use(rc.AuthMiddleware.Authenticate)
 				protected.Get("/me", rc.AuthHandler.Me)
+				protected.Put("/push-token", rc.AuthHandler.UpdatePushToken)
 			})
 		})
 
 		// Protected user routes
 		api.Group(func(protected chi.Router) {
 			protected.Use(rc.AuthMiddleware.Authenticate)
+
+			// User Device & Profile
+			protected.Route("/users", func(users chi.Router) {
+				users.Put("/push-token", rc.AuthHandler.UpdatePushToken)
+			})
 
 			// Expenses & 3-Way Outflow Ledger
 			protected.Route("/expenses", func(exp chi.Router) {

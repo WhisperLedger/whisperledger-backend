@@ -95,3 +95,24 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	response.Success(w, http.StatusOK, "user profile retrieved", user)
 }
+
+func (h *AuthHandler) UpdatePushToken(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	var body struct {
+		PushToken string `json:"push_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PushToken == "" {
+		response.BadRequest(w, "push_token is required", nil)
+		return
+	}
+
+	if err := h.authService.UpdatePushToken(r.Context(), userID, body.PushToken); err != nil {
+		response.InternalError(w, "failed to update push token: "+err.Error())
+		return
+	}
+
+	response.Success(w, http.StatusOK, "push token registered successfully", map[string]interface{}{
+		"push_token": body.PushToken,
+		"push_ready": true,
+	})
+}
