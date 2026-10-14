@@ -43,11 +43,20 @@ func (h *AdminHandler) Telemetry(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) Users(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
 
 	users, total, err := h.adminService.ListUsers(r.Context(), limit, offset)
 	if err != nil {
 		response.InternalError(w, err.Error())
 		return
+	}
+	if users == nil {
+		users = []*domain.User{}
 	}
 
 	response.Paginated(w, users, total, limit, offset)
