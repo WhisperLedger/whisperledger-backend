@@ -1,5 +1,5 @@
 -- WhisperLedger Real Firebase Data Seed Migration
--- Generated on 2026-09-20T10:50:45.947735Z from whisperledger-94715
+-- Generated on 2026-10-14T20:01:56.819278Z from whisperledger-94715
 
 -- 1. Insert Real Users
 INSERT INTO users (id, email, password_hash, full_name, avatar_url, role, is_active) VALUES ('203c94f8-6483-5744-929b-496131ee3e2a', 'tanny@gmail.com', '$2a$10$realfirebaseuserhashplaceholdersalt', 'Tanmay Agarwal', '', 'user', true) ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, avatar_url = EXCLUDED.avatar_url;

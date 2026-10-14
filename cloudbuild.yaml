@@ -1,0 +1,63 @@
+substitutions:
+  _REGION: asia-south1
+  _SERVICE: whisperledger-api
+  _MIGRATION_JOB: whisperledger-migrate
+  _REPOSITORY: whisperledger
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/whisperledger-api:$COMMIT_SHA
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/whisperledger-api:$COMMIT_SHA
+
+  # Migrations are a separate Cloud Run Job, never a side effect of API startup.
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - deploy
+      - ${_MIGRATION_JOB}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/whisperledger-api:$COMMIT_SHA
+      - --region=${_REGION}
+      - --service-account=whisperledger-runtime@$PROJECT_ID.iam.gserviceaccount.com
+      - --command=/app/migrate
+      - --args=up
+      - --set-secrets=DATABASE_URL=whisperledger-database-url:latest,JWT_SECRET=whisperledger-jwt-secret:latest,CORS_ORIGINS=whisperledger-cors-origins:latest
+      - --set-env-vars=APP_ENV=production
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - execute
+      - ${_MIGRATION_JOB}
+      - --region=${_REGION}
+      - --wait
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/whisperledger-api:$COMMIT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --service-account=whisperledger-runtime@$PROJECT_ID.iam.gserviceaccount.com
+      - --allow-unauthenticated
+      - --min-instances=0
+      - --max-instances=3
+      - --set-secrets=DATABASE_URL=whisperledger-database-url:latest,JWT_SECRET=whisperledger-jwt-secret:latest,CORS_ORIGINS=whisperledger-cors-origins:latest
+      - --set-env-vars=APP_ENV=production
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/whisperledger-api:$COMMIT_SHA

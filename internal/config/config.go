@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -21,14 +22,21 @@ type Config struct {
 	AllowedOrigins []string
 }
 
-func Load() *Config {
+func Load() (*Config, error) {
 	_ = godotenv.Load()
 
-	// Default to 10000 for Render, or 8080 for Cloud Run/local
+	// Cloud Run supplies PORT. Local development may override it in .env.
 	port := getEnv("PORT", "10000")
 	env := getEnv("APP_ENV", "development")
-	dbURL := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/whisperledger?sslmode=disable")
-	jwtSecret := getEnv("JWT_SECRET", "super-secret-production-whisperledger-key-2026")
+	dbURL := os.Getenv("DATABASE_URL")
+	jwtSecret := os.Getenv("JWT_SECRET")
+
+	if dbURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL must be configured")
+	}
+	if len(jwtSecret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters")
+	}
 
 	accessExpiryHours, _ := strconv.Atoi(getEnv("JWT_ACCESS_EXPIRY_HOURS", "24"))
 	refreshExpiryDays, _ := strconv.Atoi(getEnv("JWT_REFRESH_EXPIRY_DAYS", "30"))
@@ -66,7 +74,7 @@ func Load() *Config {
 		AccessTokenExpiry:  time.Duration(accessExpiryHours) * time.Hour,
 		RefreshTokenExpiry: time.Duration(refreshExpiryDays) * 24 * time.Hour,
 		AllowedOrigins:     defaultOrigins,
-	}
+	}, nil
 }
 
 func getEnv(key, fallback string) string {

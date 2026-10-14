@@ -34,6 +34,7 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	Update(ctx context.Context, user *User) error
+	UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error
 	List(ctx context.Context, limit, offset int) ([]*User, int, error)
 	SetHousehold(ctx context.Context, userID uuid.UUID, householdID *uuid.UUID) error
 }

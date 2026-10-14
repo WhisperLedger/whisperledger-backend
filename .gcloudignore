@@ -1,0 +1,12 @@
+.gcloudignore
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+bin/
+*.log
+*.txt
+scratch/
+node_modules/
+.neon/

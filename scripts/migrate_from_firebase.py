@@ -200,13 +200,16 @@ def main():
         "household_members": household_members
     }
 
-    dump_path = "/Users/tanmayagarwal/TanmayProjects/whisperledger-backend/data/firebase_migrated_data.json"
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    dump_path = os.path.join(base_dir, "data", "firebase_migrated_data.json")
+    os.makedirs(os.path.dirname(dump_path), exist_ok=True)
     with open(dump_path, "w", encoding="utf-8") as f:
         json.dump(dump_data, f, indent=2)
     print(f"\n💾 Saved full JSON dump to: {dump_path}")
 
     # 5. Generate SQL Seed Script
-    sql_path = "/Users/tanmayagarwal/TanmayProjects/whisperledger-backend/migrations/000002_firebase_seed.up.sql"
+    sql_path = os.path.join(base_dir, "migrations", "000002_firebase_seed.up.sql")
+    os.makedirs(os.path.dirname(sql_path), exist_ok=True)
     with open(sql_path, "w", encoding="utf-8") as f:
         f.write("-- WhisperLedger Real Firebase Data Seed Migration\n")
         f.write(f"-- Generated on {datetime.utcnow().isoformat()}Z from {PROJECT_ID}\n\n")
