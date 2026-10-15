@@ -1,0 +1,50 @@
+[
+  {
+    "id": "2JRDpoAlisHPHkvSYsNN",
+    "userId": "olvFqt1NA2XMABCDVk7lJMIIlu22",
+    "subject": "WhisperLedger Support Request",
+    "message": "Source: app_mailto - Email: agarwaltanmay401@gmail.com",
+    "status": "resolved",
+    "createdAt": "2026-05-23T08:09:20.384Z"
+  },
+  {
+    "id": "AUcVeSn98AnBrXJhwpdj",
+    "userId": "olvFqt1NA2XMABCDVk7lJMIIlu22",
+    "subject": "Issue with typing covered by keyboard",
+    "message": "Unable to write support query",
+    "status": "resolved",
+    "createdAt": "2026-08-19T23:58:31.763Z"
+  },
+  {
+    "id": "LeSLmGRSW6yZadTu4jD8",
+    "userId": "olvFqt1NA2XMABCDVk7lJMIIlu22",
+    "subject": "WhisperLedger Support Request",
+    "message": "Source: app_mailto - Email: agarwaltanmay401@gmail.com",
+    "status": "resolved",
+    "createdAt": "2026-05-23T08:00:17.886Z"
+  },
+  {
+    "id": "iL4m7KW9ekCbfaaa93Wi",
+    "userId": "olvFqt1NA2XMABCDVk7lJMIIlu22",
+    "subject": "Issue with sso login",
+    "message": "Please fix I am not able to login with my Google account",
+    "status": "resolved",
+    "createdAt": "2026-05-31T20:21:12.404Z"
+  },
+  {
+    "id": "npd7jjfKGBwR4DrxPjCE",
+    "userId": "olvFqt1NA2XMABCDVk7lJMIIlu22",
+    "subject": "Hi",
+    "message": "Hello",
+    "status": "resolved",
+    "createdAt": "2026-05-23T08:47:06.754Z"
+  },
+  {
+    "id": "yUiL4qzqnG5yS7CFAiOr",
+    "userId": "olvFqt1NA2XMABCDVk7lJMIIlu22",
+    "subject": "Chatbot Support Query",
+    "message": "Show my budget",
+    "status": "resolved",
+    "createdAt": "2026-08-19T22:38:34.524Z"
+  }
+]

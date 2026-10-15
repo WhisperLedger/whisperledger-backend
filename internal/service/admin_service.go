@@ -215,29 +215,35 @@ func (s *AdminService) dispatchExpoPush(ctx context.Context, tokens []string, ti
 		return 0
 	}
 
-	payload, err := json.Marshal(messages)
-	if err != nil {
-		return 0
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://exp.host/--/api/v2/push/send", bytes.NewBuffer(payload))
-	if err != nil {
-		return 0
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
 	client := &http.Client{Timeout: 8 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0
+	delivered := 0
+	// Expo accepts at most 100 push messages in one request. Chunking preserves
+	// predictable delivery for both an all-user broadcast and selected recipients.
+	for start := 0; start < len(messages); start += 100 {
+		end := start + 100
+		if end > len(messages) {
+			end = len(messages)
+		}
+		payload, err := json.Marshal(messages[start:end])
+		if err != nil {
+			continue
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://exp.host/--/api/v2/push/send", bytes.NewBuffer(payload))
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			delivered += end - start
+		}
+		resp.Body.Close()
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return len(messages)
-	}
-	return 0
+	return delivered
 }
 
 func (s *AdminService) CreateBroadcastNotification(ctx context.Context, notif *domain.BroadcastNotification) error {
@@ -257,6 +263,18 @@ func (s *AdminService) CreateBroadcastNotification(ctx context.Context, notif *d
 		err := s.pool.QueryRow(ctx, `SELECT push_token FROM users WHERE id = $1 AND push_token IS NOT NULL AND push_token != ''`, notif.TargetUserID).Scan(&tok)
 		if err == nil && tok != nil && *tok != "" {
 			tokens = append(tokens, *tok)
+		}
+	} else if notif.Target == "selected_users" {
+		rows, err := s.pool.Query(ctx, `SELECT push_token FROM users WHERE id = ANY($1::uuid[]) AND push_token IS NOT NULL AND push_token != ''`, notif.TargetUserIDs)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var tok string
+			if err := rows.Scan(&tok); err == nil && tok != "" {
+				tokens = append(tokens, tok)
+			}
 		}
 	} else if notif.Target == "pro_only" {
 		rows, err := s.pool.Query(ctx, `SELECT push_token FROM users WHERE plan = 'pro' AND push_token IS NOT NULL AND push_token != ''`)

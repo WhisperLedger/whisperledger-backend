@@ -105,14 +105,15 @@ func (h *AdminHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request
 }
 
 type createNotificationReq struct {
-	AppName        string     `json:"app_name"`
-	Title          string     `json:"title"`
-	Body           string     `json:"body"`
-	ImageURL       string     `json:"image_url"`
-	Target         string     `json:"target"`
-	TargetUserID   *uuid.UUID `json:"target_user_id"`
-	Type           string     `json:"type"`
-	DeliveredCount int        `json:"delivered_count"`
+	AppName        string      `json:"app_name"`
+	Title          string      `json:"title"`
+	Body           string      `json:"body"`
+	ImageURL       string      `json:"image_url"`
+	Target         string      `json:"target"`
+	TargetUserID   *uuid.UUID  `json:"target_user_id"`
+	TargetUserIDs  []uuid.UUID `json:"target_user_ids"`
+	Type           string      `json:"type"`
+	DeliveredCount int         `json:"delivered_count"`
 }
 
 func (h *AdminHandler) CreateNotification(w http.ResponseWriter, r *http.Request) {
@@ -129,19 +130,34 @@ func (h *AdminHandler) CreateNotification(w http.ResponseWriter, r *http.Request
 	if req.Target == "" {
 		req.Target = "all"
 	}
+	if req.Target != "all" && req.Target != "pro_only" && req.Target != "single_user" && req.Target != "selected_users" {
+		response.BadRequest(w, "invalid notification target", nil)
+		return
+	}
+	if req.Target == "single_user" && req.TargetUserID == nil {
+		response.BadRequest(w, "a user is required for a single-user notification", nil)
+		return
+	}
+	if req.Target == "selected_users" && (len(req.TargetUserIDs) == 0 || len(req.TargetUserIDs) > 100) {
+		response.BadRequest(w, "select between 1 and 100 users", nil)
+		return
+	}
 	if req.Type == "" {
 		req.Type = "system"
 	}
 
 	notif := &domain.BroadcastNotification{
-		AppName:        req.AppName,
-		Title:          req.Title,
-		Body:           req.Body,
-		ImageURL:       req.ImageURL,
-		Target:         req.Target,
-		TargetUserID:   req.TargetUserID,
-		Type:           req.Type,
-		DeliveredCount: req.DeliveredCount,
+		AppName:       req.AppName,
+		Title:         req.Title,
+		Body:          req.Body,
+		ImageURL:      req.ImageURL,
+		Target:        req.Target,
+		TargetUserID:  req.TargetUserID,
+		TargetUserIDs: req.TargetUserIDs,
+		Type:          req.Type,
+		// Recipient counts are calculated from valid server-side push tokens.
+		// Do not trust a count supplied by the console client.
+		DeliveredCount: 0,
 		DispatchStatus: "delivered",
 	}
 

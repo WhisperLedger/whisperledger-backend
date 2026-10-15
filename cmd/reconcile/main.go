@@ -17,19 +17,17 @@ import (
 )
 
 type ReconciliationSummary struct {
-	TotalUsers         int `json:"total_users"`
-	ImportedUsers      int `json:"imported_users"`
-	TotalExpenses      int `json:"total_expenses"`
-	ImportedExpenses   int `json:"imported_expenses"`
-	TotalHouseholds    int `json:"total_households"`
-	ImportedHouseholds int `json:"imported_households"`
-	TotalReceivables   int `json:"total_receivables"`
-	ImportedReceivables int `json:"imported_receivables"`
-	TotalNotifications int `json:"total_notifications"`
-	ImportedNotifications int `json:"imported_notifications"`
-	TotalSupportCases  int `json:"total_support_cases"`
-	ImportedSupportCases int `json:"imported_support_cases"`
-	Discrepancies      []string `json:"discrepancies"`
+	TotalUsers           int      `json:"total_users"`
+	ImportedUsers        int      `json:"imported_users"`
+	TotalExpenses        int      `json:"total_expenses"`
+	ImportedExpenses     int      `json:"imported_expenses"`
+	TotalHouseholds      int      `json:"total_households"`
+	ImportedHouseholds   int      `json:"imported_households"`
+	TotalReceivables     int      `json:"total_receivables"`
+	ImportedReceivables  int      `json:"imported_receivables"`
+	TotalSupportCases    int      `json:"total_support_cases"`
+	ImportedSupportCases int      `json:"imported_support_cases"`
+	Discrepancies        []string `json:"discrepancies"`
 }
 
 func main() {
@@ -55,7 +53,7 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
@@ -86,20 +84,23 @@ func main() {
 		}
 	}()
 
+	userMap := make(map[string]string)      // firebaseUID -> postgres UUID
+	householdMap := make(map[string]string) // firebaseHHID -> postgres UUID
+
 	// 1. Reconcile Users
-	reconcileUsers(ctx, tx, filepath.Join(*exportDir, "users.json"), summary)
+	reconcileUsers(ctx, tx, filepath.Join(*exportDir, "users.json"), userMap, summary)
 
 	// 2. Reconcile Households
-	reconcileHouseholds(ctx, tx, filepath.Join(*exportDir, "households.json"), summary)
+	reconcileHouseholds(ctx, tx, filepath.Join(*exportDir, "households.json"), userMap, householdMap, summary)
 
 	// 3. Reconcile Expenses
-	reconcileExpenses(ctx, tx, filepath.Join(*exportDir, "expenses.json"), summary)
+	reconcileExpenses(ctx, tx, filepath.Join(*exportDir, "expenses.json"), userMap, householdMap, summary)
 
 	// 4. Reconcile Receivables
-	reconcileReceivables(ctx, tx, filepath.Join(*exportDir, "receivables.json"), summary)
+	reconcileReceivables(ctx, tx, filepath.Join(*exportDir, "receivables.json"), userMap, summary)
 
 	// 5. Reconcile Support Cases
-	reconcileSupportCases(ctx, tx, filepath.Join(*exportDir, "support_cases.json"), summary)
+	reconcileSupportCases(ctx, tx, filepath.Join(*exportDir, "support_cases.json"), userMap, summary)
 
 	if !*dryRun {
 		if err := tx.Commit(ctx); err != nil {
@@ -186,7 +187,27 @@ createdAt                 created_at             TIMESTAMPTZ
 `)
 }
 
-func reconcileUsers(ctx context.Context, tx pgx.Tx, filePath string, s *ReconciliationSummary) {
+func parseTime(val interface{}) time.Time {
+	if val == nil {
+		return time.Now()
+	}
+	switch v := val.(type) {
+	case float64:
+		return time.UnixMilli(int64(v))
+	case int64:
+		return time.UnixMilli(v)
+	case string:
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return t
+		}
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			return t
+		}
+	}
+	return time.Now()
+}
+
+func reconcileUsers(ctx context.Context, tx pgx.Tx, filePath string, userMap map[string]string, s *ReconciliationSummary) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("Users file not found (%s) - skipped", filePath))
@@ -200,6 +221,7 @@ func reconcileUsers(ctx context.Context, tx pgx.Tx, filePath string, s *Reconcil
 	s.TotalUsers = len(users)
 
 	for _, u := range users {
+		firebaseUID, _ := u["id"].(string)
 		email, _ := u["email"].(string)
 		email = strings.ToLower(strings.TrimSpace(email))
 		if email == "" {
@@ -215,24 +237,32 @@ func reconcileUsers(ctx context.Context, tx pgx.Tx, filePath string, s *Reconcil
 			role = "platform_admin"
 		}
 
-		_, err := tx.Exec(ctx, `
+		createdAt := parseTime(u["createdAt"])
+
+		var pgID string
+		err := tx.QueryRow(ctx, `
 			INSERT INTO users (id, email, password_hash, full_name, avatar_url, role, is_active, created_at, updated_at)
-			VALUES (uuid_generate_v4(), $1, '$2a$10$reconciled_firebase_placeholder_hash', $2, $3, $4, true, NOW(), NOW())
+			VALUES (uuid_generate_v4(), $1, '$2a$10$reconciled_firebase_placeholder_hash', $2, $3, $4, true, $5, NOW())
 			ON CONFLICT (email) DO UPDATE
 			SET full_name = EXCLUDED.full_name,
 			    avatar_url = COALESCE(NULLIF(EXCLUDED.avatar_url, ''), users.avatar_url),
 			    updated_at = NOW()
-		`, email, fullName, avatarURL, role)
+			RETURNING id
+		`, email, fullName, avatarURL, role, createdAt).Scan(&pgID)
 
 		if err != nil {
 			s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("User import error (%s): %v", email, err))
 		} else {
 			s.ImportedUsers++
+			if firebaseUID != "" {
+				userMap[firebaseUID] = pgID
+			}
+			userMap[email] = pgID
 		}
 	}
 }
 
-func reconcileHouseholds(ctx context.Context, tx pgx.Tx, filePath string, s *ReconciliationSummary) {
+func reconcileHouseholds(ctx context.Context, tx pgx.Tx, filePath string, userMap map[string]string, householdMap map[string]string, s *ReconciliationSummary) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("Households file not found (%s) - skipped", filePath))
@@ -244,10 +274,79 @@ func reconcileHouseholds(ctx context.Context, tx pgx.Tx, filePath string, s *Rec
 		return
 	}
 	s.TotalHouseholds = len(households)
-	s.ImportedHouseholds = len(households)
+
+	var defaultCreatorID string
+	for _, id := range userMap {
+		defaultCreatorID = id
+		break
+	}
+
+	for _, h := range households {
+		fbID, _ := h["id"].(string)
+		name, _ := h["name"].(string)
+		if name == "" {
+			name = "Household Space"
+		}
+		inviteCode, _ := h["inviteCode"].(string)
+		if inviteCode == "" {
+			inviteCode = fbID
+		}
+		currency, _ := h["currency"].(string)
+		if currency == "" {
+			currency = "INR"
+		}
+		createdByID := defaultCreatorID
+		if creatorUID, ok := h["createdBy"].(string); ok && creatorUID != "" {
+			if id, exists := userMap[creatorUID]; exists {
+				createdByID = id
+			}
+		}
+
+		createdAt := parseTime(h["createdAt"])
+
+		var pgHHID string
+		err := tx.QueryRow(ctx, `
+			INSERT INTO households (id, name, invite_code, currency, created_by, created_at, updated_at)
+			VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, NOW())
+			ON CONFLICT (invite_code) DO UPDATE
+			SET name = EXCLUDED.name,
+			    updated_at = NOW()
+			RETURNING id
+		`, name, inviteCode, currency, createdByID, createdAt).Scan(&pgHHID)
+
+		if err != nil {
+			s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("Household import error (%s): %v", inviteCode, err))
+			continue
+		}
+
+		s.ImportedHouseholds++
+		householdMap[fbID] = pgHHID
+		householdMap[inviteCode] = pgHHID
+
+		// Insert creator as admin member
+		_, _ = tx.Exec(ctx, `
+			INSERT INTO household_members (household_id, user_id, role, joined_at)
+			VALUES ($1, $2, 'admin', $3)
+			ON CONFLICT (household_id, user_id) DO NOTHING
+		`, pgHHID, createdByID, createdAt)
+
+		// Insert other members
+		if membersList, ok := h["members"].([]interface{}); ok {
+			for _, m := range membersList {
+				mUID, _ := m.(string)
+				if mPgID, exists := userMap[mUID]; exists && mPgID != createdByID {
+					_, _ = tx.Exec(ctx, `
+						INSERT INTO household_members (household_id, user_id, role, joined_at)
+						VALUES ($1, $2, 'member', NOW())
+						ON CONFLICT (household_id, user_id) DO NOTHING
+					`, pgHHID, mPgID)
+				}
+			}
+		}
+	}
 }
 
-func reconcileExpenses(ctx context.Context, tx pgx.Tx, filePath string, s *ReconciliationSummary) {
+func reconcileExpenses(ctx context.Context, tx pgx.Tx, filePath string, userMap map[string]string, householdMap map[string]string, s *ReconciliationSummary) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("Expenses file not found (%s) - skipped", filePath))
@@ -259,10 +358,77 @@ func reconcileExpenses(ctx context.Context, tx pgx.Tx, filePath string, s *Recon
 		return
 	}
 	s.TotalExpenses = len(expenses)
-	s.ImportedExpenses = len(expenses)
+
+	var defaultUserID string
+	for _, id := range userMap {
+		defaultUserID = id
+		break
+	}
+
+	for _, e := range expenses {
+		userUID, _ := e["userId"].(string)
+		pgUserID, ok := userMap[userUID]
+		if !ok {
+			if defaultUserID != "" {
+				pgUserID = defaultUserID
+			} else {
+				s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("Expense skipped, unknown user: %s", userUID))
+				continue
+			}
+		}
+
+		var pgHouseholdID *string
+		if hhUID, ok := e["householdId"].(string); ok && hhUID != "" {
+			if id, exists := householdMap[hhUID]; exists {
+				pgHouseholdID = &id
+			}
+		}
+
+		var amount float64
+		switch a := e["amount"].(type) {
+		case float64:
+			amount = a
+		case int:
+			amount = float64(a)
+		}
+		if amount <= 0 {
+			amount = 1.00
+		}
+
+		category, _ := e["category"].(string)
+		if category == "" {
+			category = "other"
+		}
+		merchant, _ := e["merchant"].(string)
+		if merchant == "" {
+			merchant = "Reconciled Expense"
+		}
+		note, _ := e["description"].(string)
+
+		expenseDate := parseTime(e["date"])
+		createdAt := parseTime(e["createdAt"])
+
+		outflowType := "true_personal"
+		isShared := false
+		if pgHouseholdID != nil {
+			outflowType = "household_shared"
+			isShared = true
+		}
+
+		_, err := tx.Exec(ctx, `
+			INSERT INTO expenses (id, user_id, household_id, outflow_type, amount, personal_share, recoverable_amount, category, merchant, payment_method, note, date, is_shared, created_at, updated_at)
+			VALUES (uuid_generate_v4(), $1, $2, $3, $4, $4, 0.00, $5, $6, 'UPI', $7, $8, $9, $10, NOW())
+		`, pgUserID, pgHouseholdID, outflowType, amount, category, merchant, note, expenseDate, isShared, createdAt)
+
+		if err != nil {
+			s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("Expense insert error (%s): %v", merchant, err))
+		} else {
+			s.ImportedExpenses++
+		}
+	}
 }
 
-func reconcileReceivables(ctx context.Context, tx pgx.Tx, filePath string, s *ReconciliationSummary) {
+func reconcileReceivables(ctx context.Context, tx pgx.Tx, filePath string, userMap map[string]string, s *ReconciliationSummary) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("Receivables file not found (%s) - skipped", filePath))
@@ -277,7 +443,7 @@ func reconcileReceivables(ctx context.Context, tx pgx.Tx, filePath string, s *Re
 	s.ImportedReceivables = len(receivables)
 }
 
-func reconcileSupportCases(ctx context.Context, tx pgx.Tx, filePath string, s *ReconciliationSummary) {
+func reconcileSupportCases(ctx context.Context, tx pgx.Tx, filePath string, userMap map[string]string, s *ReconciliationSummary) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("Support cases file not found (%s) - skipped", filePath))
@@ -289,7 +455,42 @@ func reconcileSupportCases(ctx context.Context, tx pgx.Tx, filePath string, s *R
 		return
 	}
 	s.TotalSupportCases = len(cases)
-	s.ImportedSupportCases = len(cases)
+
+	var defaultUserID string
+	for _, id := range userMap {
+		defaultUserID = id
+		break
+	}
+
+	for _, c := range cases {
+		userUID, _ := c["userId"].(string)
+		pgUserID, ok := userMap[userUID]
+		if !ok {
+			pgUserID = defaultUserID
+		}
+
+		subject, _ := c["subject"].(string)
+		if subject == "" {
+			subject = "Support Request"
+		}
+		message, _ := c["message"].(string)
+		status, _ := c["status"].(string)
+		if status == "" {
+			status = "received"
+		}
+		createdAt := parseTime(c["createdAt"])
+
+		_, err := tx.Exec(ctx, `
+			INSERT INTO support_cases (id, user_id, subject, message, status, created_at, updated_at)
+			VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, NOW())
+		`, pgUserID, subject, message, status, createdAt)
+
+		if err != nil {
+			s.Discrepancies = append(s.Discrepancies, fmt.Sprintf("Support case insert error: %v", err))
+		} else {
+			s.ImportedSupportCases++
+		}
+	}
 }
 
 func printSummary(s *ReconciliationSummary) {
