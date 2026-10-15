@@ -21,8 +21,8 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	query := `
-		INSERT INTO users (id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id, plan, status, push_ready, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO users (id, email, password_hash, full_name, phone_number, avatar_url, google_subject, role, is_active, household_id, plan, status, push_ready, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 	now := time.Now().UTC()
 	if u.ID == uuid.Nil {
@@ -38,7 +38,7 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	u.UpdatedAt = now
 
 	_, err := r.pool.Exec(ctx, query,
-		u.ID, u.Email, u.PasswordHash, u.FullName, u.PhoneNumber, u.AvatarURL,
+		u.ID, u.Email, u.PasswordHash, u.FullName, u.PhoneNumber, u.AvatarURL, u.GoogleSubject,
 		u.Role, u.IsActive, u.HouseholdID, u.Plan, u.Status, u.PushReady, u.CreatedAt, u.UpdatedAt,
 	)
 	return err
@@ -46,7 +46,7 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id,
+		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, role, is_active, household_id,
 		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
 		       created_at, updated_at
 		FROM users
@@ -54,7 +54,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 	`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL,
+		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject,
 		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -69,7 +69,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone_number, avatar_url, role, is_active, household_id,
+		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, role, is_active, household_id,
 		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
 		       created_at, updated_at
 		FROM users
@@ -77,7 +77,30 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, email).Scan(
-		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL,
+		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject,
+		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
+		&u.CreatedAt, &u.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *UserRepository) GetByGoogleSubject(ctx context.Context, subject string) (*domain.User, error) {
+	query := `
+		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, role, is_active, household_id,
+		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
+		       created_at, updated_at
+		FROM users
+		WHERE google_subject = $1
+	`
+	var u domain.User
+	err := r.pool.QueryRow(ctx, query, subject).Scan(
+		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject,
 		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
 		&u.CreatedAt, &u.UpdatedAt,
 	)

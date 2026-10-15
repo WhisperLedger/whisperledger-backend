@@ -94,8 +94,11 @@ func (r *ReceivableRepository) List(ctx context.Context, filter domain.Receivabl
 	}
 
 	limit := filter.Limit
-	if limit <= 0 || limit > 100 {
+	if limit <= 0 {
 		limit = 50
+	}
+	if limit > 1000 {
+		limit = 1000
 	}
 	offset := filter.Offset
 	if offset < 0 {

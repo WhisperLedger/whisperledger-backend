@@ -71,6 +71,28 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, http.StatusOK, "login successful", result)
 }
 
+func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+	var input service.GoogleLoginInput
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10)).Decode(&input); err != nil || input.IDToken == "" {
+		response.BadRequest(w, "a Google ID token is required", nil)
+		return
+	}
+
+	result, err := h.authService.GoogleLogin(r.Context(), input)
+	if err != nil {
+		switch err {
+		case service.ErrGoogleTokenInvalid, service.ErrAccountInactive:
+			response.Unauthorized(w, err.Error())
+		case service.ErrGoogleAccountLinkRequired:
+			response.Error(w, http.StatusConflict, "GOOGLE_ACCOUNT_LINK_REQUIRED", err.Error(), nil)
+		default:
+			response.InternalError(w, "could not complete Google sign-in")
+		}
+		return
+	}
+	response.Success(w, http.StatusOK, "Google sign-in successful", result)
+}
+
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		RefreshToken string `json:"refresh_token"`

@@ -16,21 +16,22 @@ const (
 )
 
 type User struct {
-	ID           uuid.UUID  `json:"id"`
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"`
-	FullName     string     `json:"full_name"`
-	PhoneNumber  *string    `json:"phone_number,omitempty"`
-	AvatarURL    *string    `json:"avatar_url,omitempty"`
-	Role         Role       `json:"role"`
-	IsActive     bool       `json:"is_active"`
-	HouseholdID  *uuid.UUID `json:"household_id,omitempty"`
-	Plan         string     `json:"plan"`
-	Status       string     `json:"status"`
-	PushToken    *string    `json:"push_token,omitempty"`
-	PushReady    bool       `json:"push_ready"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID            uuid.UUID  `json:"id"`
+	Email         string     `json:"email"`
+	PasswordHash  string     `json:"-"`
+	FullName      string     `json:"full_name"`
+	PhoneNumber   *string    `json:"phone_number,omitempty"`
+	AvatarURL     *string    `json:"avatar_url,omitempty"`
+	GoogleSubject *string    `json:"-"`
+	Role          Role       `json:"role"`
+	IsActive      bool       `json:"is_active"`
+	HouseholdID   *uuid.UUID `json:"household_id,omitempty"`
+	Plan          string     `json:"plan"`
+	Status        string     `json:"status"`
+	PushToken     *string    `json:"push_token,omitempty"`
+	PushReady     bool       `json:"push_ready"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 type BroadcastNotification struct {
@@ -56,6 +57,7 @@ type UserRepository interface {
 	Create(ctx context.Context, user *User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	GetByGoogleSubject(ctx context.Context, subject string) (*User, error)
 	Update(ctx context.Context, user *User) error
 	UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error
 	UpdateSubscription(ctx context.Context, id uuid.UUID, plan, status string) error

@@ -15,9 +15,10 @@ type Config struct {
 	Port        string
 	DatabaseURL string
 
-	JWTSecret          string
-	AccessTokenExpiry  time.Duration
-	RefreshTokenExpiry time.Duration
+	JWTSecret           string
+	AccessTokenExpiry   time.Duration
+	RefreshTokenExpiry  time.Duration
+	GoogleOAuthClientID string
 
 	AllowedOrigins []string
 }
@@ -74,13 +75,14 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Environment:        env,
-		Port:               port,
-		DatabaseURL:        dbURL,
-		JWTSecret:          jwtSecret,
-		AccessTokenExpiry:  time.Duration(accessExpiryHours) * time.Hour,
-		RefreshTokenExpiry: time.Duration(refreshExpiryDays) * 24 * time.Hour,
-		AllowedOrigins:     defaultOrigins,
+		Environment:         env,
+		Port:                port,
+		DatabaseURL:         dbURL,
+		JWTSecret:           jwtSecret,
+		AccessTokenExpiry:   time.Duration(accessExpiryHours) * time.Hour,
+		RefreshTokenExpiry:  time.Duration(refreshExpiryDays) * 24 * time.Hour,
+		GoogleOAuthClientID: getEnv("GOOGLE_OAUTH_CLIENT_ID", "1064792050841-amo41uudlpvmuoou362ijcktfe198hdr.apps.googleusercontent.com"),
+		AllowedOrigins:      defaultOrigins,
 	}, nil
 }
 
