@@ -76,6 +76,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 			// edge/WAF rule as the second layer in production.
 			auth.With(middleware.RateLimitByIP(10, 15*time.Minute)).Post("/register", rc.AuthHandler.Register)
 			auth.With(middleware.RateLimitByIP(20, 15*time.Minute)).Post("/login", rc.AuthHandler.Login)
+			auth.With(middleware.RateLimitByIP(20, 15*time.Minute)).Post("/google", rc.AuthHandler.GoogleLogin)
 			auth.With(middleware.RateLimitByIP(30, 15*time.Minute)).Post("/refresh", rc.AuthHandler.Refresh)
 
 			// Protected auth route
