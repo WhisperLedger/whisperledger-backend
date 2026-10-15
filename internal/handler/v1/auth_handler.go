@@ -116,3 +116,24 @@ func (h *AuthHandler) UpdatePushToken(w http.ResponseWriter, r *http.Request) {
 		"push_ready": true,
 	})
 }
+
+func (h *AuthHandler) SyncSession(w http.ResponseWriter, r *http.Request) {
+	var input service.SyncSessionInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		response.BadRequest(w, "invalid request body", err.Error())
+		return
+	}
+
+	if input.Email == "" {
+		response.BadRequest(w, "email is required", nil)
+		return
+	}
+
+	result, err := h.authService.SyncSession(r.Context(), input)
+	if err != nil {
+		response.InternalError(w, err.Error())
+		return
+	}
+
+	response.Success(w, http.StatusOK, "session synced successfully", result)
+}
