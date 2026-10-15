@@ -174,3 +174,73 @@ func (s *AuthService) GetUser(ctx context.Context, userID uuid.UUID) (*domain.Us
 func (s *AuthService) UpdatePushToken(ctx context.Context, userID uuid.UUID, pushToken string) error {
 	return s.userRepo.UpdatePushToken(ctx, userID, pushToken)
 }
+
+type SyncSessionInput struct {
+	Email     string  `json:"email"`
+	FullName  string  `json:"full_name"`
+	AvatarURL *string `json:"avatar_url"`
+}
+
+func (s *AuthService) SyncSession(ctx context.Context, input SyncSessionInput) (*AuthResult, error) {
+	email := strings.TrimSpace(strings.ToLower(input.Email))
+	if email == "" {
+		return nil, errors.New("email is required")
+	}
+
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+
+	if user == nil {
+		placeholderHash, err := hash.HashPassword(uuid.New().String() + "-whisper-sync-salt")
+		if err != nil {
+			return nil, err
+		}
+		fullName := strings.TrimSpace(input.FullName)
+		if fullName == "" {
+			fullName = strings.Split(email, "@")[0]
+		}
+		user = &domain.User{
+			ID:           uuid.New(),
+			Email:        email,
+			PasswordHash: placeholderHash,
+			FullName:     fullName,
+			AvatarURL:    input.AvatarURL,
+			Role:         domain.RoleUser,
+			IsActive:     true,
+			Plan:         "starter_free",
+			Status:       "active",
+		}
+		if err := s.userRepo.Create(ctx, user); err != nil {
+			return nil, err
+		}
+	} else {
+		if !user.IsActive {
+			return nil, ErrAccountInactive
+		}
+		// Update profile details if newly provided
+		dirty := false
+		if strings.TrimSpace(input.FullName) != "" && user.FullName != strings.TrimSpace(input.FullName) {
+			user.FullName = strings.TrimSpace(input.FullName)
+			dirty = true
+		}
+		if input.AvatarURL != nil && (user.AvatarURL == nil || *user.AvatarURL != *input.AvatarURL) {
+			user.AvatarURL = input.AvatarURL
+			dirty = true
+		}
+		if dirty {
+			_ = s.userRepo.Update(ctx, user)
+		}
+	}
+
+	tokens, err := s.tokenMaker.GenerateTokenPair(user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuthResult{
+		User:   user,
+		Tokens: tokens,
+	}, nil
+}

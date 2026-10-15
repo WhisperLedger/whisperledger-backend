@@ -67,6 +67,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 			auth.Post("/register", rc.AuthHandler.Register)
 			auth.Post("/login", rc.AuthHandler.Login)
 			auth.Post("/refresh", rc.AuthHandler.Refresh)
+			auth.Post("/sync-session", rc.AuthHandler.SyncSession)
 
 			// Protected auth route
 			auth.Group(func(protected chi.Router) {
