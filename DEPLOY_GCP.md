@@ -18,7 +18,22 @@ This backend is designed to run with Cloud Run, Cloud SQL for PostgreSQL, Artifa
 
 Trigger `cloudbuild.yaml` from `main` after CI succeeds. It builds an immutable image, runs migrations as a Cloud Run Job, waits for success, and only then deploys the API service.
 
-Do not enable the frontend API mode until data migration and API parity are complete. The current application remains in `EXPO_PUBLIC_DATA_BACKEND=firebase` mode, so there is no dual-write risk.
+Production mobile builds use `EXPO_PUBLIC_DATA_BACKEND=api` and must set
+`EXPO_PUBLIC_API_URL` to the Cloud Run `/api/v1` origin. Never let a release
+build silently fall back to Firebase or localhost. Deploy the database
+migration job before the API revision, then test register, login, expenses,
+recovery, households, SMS approval and admin authorization against staging.
+
+## Release gate
+
+- Disable the legacy Firebase project only after a signed, verified export and
+  import reconciliation. Do not dual-write financial data.
+- Keep the former Firebase seed migration out of fresh production databases;
+  historical accounts require a verified password-reset/migration flow rather
+  than a placeholder password.
+- Protect `admin.whisperledger.in` with Vercel Authentication or an equivalent
+  identity-aware proxy, enforced MFA, and an IP allow-list. Application roles
+  remain the second line of defence, never the only one.
 
 ## Operational safeguards
 

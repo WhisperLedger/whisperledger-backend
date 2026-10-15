@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	ErrHouseholdNotFound = errors.New("household not found")
+	ErrHouseholdNotFound  = errors.New("household not found")
 	ErrAlreadyInHousehold = errors.New("user is already a member of a household")
-	ErrNotInHousehold    = errors.New("user is not a member of any household")
+	ErrNotInHousehold     = errors.New("user is not a member of any household")
 )
 
 type HouseholdService struct {
@@ -108,6 +108,19 @@ func (s *HouseholdService) GetHousehold(ctx context.Context, householdID uuid.UU
 		return nil, ErrHouseholdNotFound
 	}
 	return h, nil
+}
+
+func (s *HouseholdService) RequireMember(ctx context.Context, userID, householdID uuid.UUID) error {
+	members, err := s.householdRepo.ListMembers(ctx, householdID)
+	if err != nil {
+		return err
+	}
+	for _, member := range members {
+		if member.UserID == userID {
+			return nil
+		}
+	}
+	return ErrHouseholdNotFound
 }
 
 func (s *HouseholdService) LeaveHousehold(ctx context.Context, userID, householdID uuid.UUID) error {

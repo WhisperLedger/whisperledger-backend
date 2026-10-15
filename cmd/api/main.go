@@ -65,6 +65,7 @@ func main() {
 	expenseRepo := postgres.NewExpenseRepository(dbPool)
 	householdRepo := postgres.NewHouseholdRepository(dbPool)
 	receivableRepo := postgres.NewReceivableRepository(dbPool)
+	interestRepo := postgres.NewInterestRepository(dbPool)
 
 	// Services
 	authService := service.NewAuthService(userRepo, tokenMaker)
@@ -73,6 +74,8 @@ func main() {
 	recoveryService := service.NewRecoveryService(receivableRepo)
 	detectiveService := service.NewDetectiveService(expenseRepo, receivableRepo, householdRepo)
 	adminService := service.NewAdminService(dbPool, userRepo)
+	interestService := service.NewInterestService(interestRepo)
+	productService := service.NewProductService(dbPool)
 
 	// Middleware
 	authMiddleware := middleware.NewAuthMiddleware(tokenMaker)
@@ -84,6 +87,8 @@ func main() {
 	recoveryHandler := v1.NewRecoveryHandler(recoveryService)
 	detectiveHandler := v1.NewDetectiveHandler(detectiveService, authService)
 	adminHandler := v1.NewAdminHandler(adminService)
+	interestHandler := v1.NewInterestHandler(interestService)
+	productHandler := v1.NewProductHandler(productService)
 
 	// Router
 	r := handler.NewRouter(handler.RouterConfig{
@@ -96,6 +101,8 @@ func main() {
 		RecoveryHandler:  recoveryHandler,
 		DetectiveHandler: detectiveHandler,
 		AdminHandler:     adminHandler,
+		InterestHandler:  interestHandler,
+		ProductHandler:   productHandler,
 	})
 
 	// HTTP Server

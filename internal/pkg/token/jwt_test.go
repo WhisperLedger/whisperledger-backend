@@ -35,4 +35,11 @@ func TestTokenGenerationAndValidation(t *testing.T) {
 	if claims.UserID != user.ID || claims.Email != user.Email {
 		t.Errorf("Claims mismatch. Got %+v, expected user ID %s", claims, user.ID)
 	}
+
+	if _, err := maker.ValidateRefreshToken(pair.AccessToken); err == nil {
+		t.Error("access token must not be accepted by the refresh validator")
+	}
+	if _, err := maker.ValidateRefreshToken(pair.RefreshToken); err != nil {
+		t.Fatalf("refresh token should be accepted: %v", err)
+	}
 }

@@ -101,10 +101,10 @@ func (s *AdminService) GetCloudTelemetry(ctx context.Context) (*domain.CloudTele
 		DailyVolumes:   make([]domain.DailyVolumeStat, 0),
 		RecentLogs:     make([]domain.SystemLogEntry, 0),
 		GCPConsoleLinks: map[string]string{
-			"cloud_run": "https://console.cloud.google.com/run/detail/asia-south1/whisperledger-api/metrics?project=whisperledger-94715",
+			"cloud_run":     "https://console.cloud.google.com/run/detail/asia-south1/whisperledger-api/metrics?project=whisperledger-94715",
 			"cloud_logging": "https://console.cloud.google.com/logs/query?project=whisperledger-94715",
-			"cloud_build": "https://console.cloud.google.com/cloud-build/builds?project=whisperledger-94715",
-			"neon_console": "https://console.neon.tech/",
+			"cloud_build":   "https://console.cloud.google.com/cloud-build/builds?project=whisperledger-94715",
+			"neon_console":  "https://console.neon.tech/",
 		},
 	}
 
@@ -161,6 +161,19 @@ func (s *AdminService) ListUsers(ctx context.Context, limit, offset int) ([]*dom
 
 func (s *AdminService) UpdateUserSubscription(ctx context.Context, id uuid.UUID, plan, status string) error {
 	return s.userRepo.UpdateSubscription(ctx, id, plan, status)
+}
+
+func (s *AdminService) RecordAudit(ctx context.Context, actorID uuid.UUID, action, targetType, targetID string, metadata map[string]interface{}) {
+	payload, err := json.Marshal(metadata)
+	if err != nil {
+		return
+	}
+	// Audit writes are intentionally best-effort: an operations action must not
+	// be repeated if a secondary audit insert has a transient failure.
+	_, _ = s.pool.Exec(ctx, `
+		INSERT INTO audit_events (actor_user_id, action, target_type, target_id, metadata)
+		VALUES ($1, $2, $3, $4, $5)
+	`, actorID, action, targetType, targetID, payload)
 }
 
 type expoPushMessage struct {
@@ -321,4 +334,3 @@ func (s *AdminService) ListBroadcastNotifications(ctx context.Context, limit int
 	}
 	return list, nil
 }
-

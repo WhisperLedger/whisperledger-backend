@@ -87,7 +87,11 @@ func (h *RecoveryHandler) Settle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.recoveryService.Settle(r.Context(), id, body.Amount); err != nil {
+	if err := h.recoveryService.Settle(r.Context(), middleware.GetUserID(r.Context()), id, body.Amount); err != nil {
+		if err == service.ErrReceivableNotFound {
+			response.NotFound(w, "receivable not found")
+			return
+		}
 		response.InternalError(w, err.Error())
 		return
 	}

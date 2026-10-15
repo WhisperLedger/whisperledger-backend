@@ -104,13 +104,40 @@ func (h *ExpenseHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expense, err := h.ledgerService.GetExpense(r.Context(), id)
+	expense, err := h.ledgerService.GetUserExpense(r.Context(), middleware.GetUserID(r.Context()), id)
 	if err != nil {
 		response.NotFound(w, "expense not found")
 		return
 	}
 
 	response.Success(w, http.StatusOK, "expense retrieved", expense)
+}
+
+func (h *ExpenseHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid expense id", nil)
+		return
+	}
+	var input service.CreateExpenseInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		response.BadRequest(w, "invalid request body", nil)
+		return
+	}
+	if input.Amount <= 0 || input.Merchant == "" {
+		response.BadRequest(w, "amount and merchant are required", nil)
+		return
+	}
+	expense, err := h.ledgerService.UpdateExpense(r.Context(), middleware.GetUserID(r.Context()), id, input)
+	if err != nil {
+		if err == service.ErrExpenseNotFound {
+			response.NotFound(w, "expense not found")
+			return
+		}
+		response.InternalError(w, err.Error())
+		return
+	}
+	response.Success(w, http.StatusOK, "expense updated", expense)
 }
 
 func (h *ExpenseHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +148,11 @@ func (h *ExpenseHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.ledgerService.DeleteExpense(r.Context(), id); err != nil {
+	if err := h.ledgerService.DeleteExpense(r.Context(), middleware.GetUserID(r.Context()), id); err != nil {
+		if err == service.ErrExpenseNotFound {
+			response.NotFound(w, "expense not found")
+			return
+		}
 		response.InternalError(w, err.Error())
 		return
 	}

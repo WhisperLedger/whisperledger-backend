@@ -31,6 +31,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.authService.Register(r.Context(), input)
 	if err != nil {
+		if err == service.ErrMigrationReset {
+			response.Error(w, http.StatusConflict, "MIGRATION_PASSWORD_RESET_REQUIRED", err.Error(), nil)
+			return
+		}
 		if err == service.ErrUserExists {
 			response.Error(w, http.StatusConflict, "USER_EXISTS", err.Error(), nil)
 			return
@@ -56,7 +60,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.authService.Login(r.Context(), input)
 	if err != nil {
-		if err == service.ErrInvalidCreds || err == service.ErrAccountInactive {
+		if err == service.ErrInvalidCreds || err == service.ErrAccountInactive || err == service.ErrMigrationReset {
 			response.Unauthorized(w, err.Error())
 			return
 		}
@@ -96,6 +100,23 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, http.StatusOK, "user profile retrieved", user)
 }
 
+func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		FullName  string  `json:"full_name"`
+		AvatarURL *string `json:"avatar_url"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&body); err != nil {
+		response.BadRequest(w, "invalid request body", nil)
+		return
+	}
+	user, err := h.authService.UpdateProfile(r.Context(), middleware.GetUserID(r.Context()), body.FullName, body.AvatarURL)
+	if err != nil {
+		response.InternalError(w, "could not update profile")
+		return
+	}
+	response.Success(w, http.StatusOK, "profile updated", user)
+}
+
 func (h *AuthHandler) UpdatePushToken(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	var body struct {
@@ -115,25 +136,4 @@ func (h *AuthHandler) UpdatePushToken(w http.ResponseWriter, r *http.Request) {
 		"push_token": body.PushToken,
 		"push_ready": true,
 	})
-}
-
-func (h *AuthHandler) SyncSession(w http.ResponseWriter, r *http.Request) {
-	var input service.SyncSessionInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		response.BadRequest(w, "invalid request body", err.Error())
-		return
-	}
-
-	if input.Email == "" {
-		response.BadRequest(w, "email is required", nil)
-		return
-	}
-
-	result, err := h.authService.SyncSession(r.Context(), input)
-	if err != nil {
-		response.InternalError(w, err.Error())
-		return
-	}
-
-	response.Success(w, http.StatusOK, "session synced successfully", result)
 }

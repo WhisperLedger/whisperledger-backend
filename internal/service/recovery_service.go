@@ -78,9 +78,13 @@ func (s *RecoveryService) List(ctx context.Context, filter domain.ReceivableFilt
 	return s.repo.List(ctx, filter)
 }
 
-func (s *RecoveryService) Settle(ctx context.Context, id uuid.UUID, amount float64) error {
+func (s *RecoveryService) Settle(ctx context.Context, userID, id uuid.UUID, amount float64) error {
 	if amount <= 0 {
 		return ErrInvalidAmount
+	}
+	rec, err := s.GetByID(ctx, id)
+	if err != nil || rec.UserID != userID {
+		return ErrReceivableNotFound
 	}
 	return s.repo.Settle(ctx, id, amount)
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"whisperledger-backend/internal/domain"
+	"whisperledger-backend/internal/middleware"
 	"whisperledger-backend/internal/pkg/response"
 	"whisperledger-backend/internal/service"
 )
@@ -92,6 +93,9 @@ func (h *AdminHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request
 		response.InternalError(w, err.Error())
 		return
 	}
+	h.adminService.RecordAudit(r.Context(), middleware.GetUserID(r.Context()), "subscription.updated", "user", userID.String(), map[string]interface{}{
+		"plan": req.Plan, "status": req.Status,
+	})
 
 	response.Success(w, http.StatusOK, "user subscription updated successfully", map[string]interface{}{
 		"user_id": userID,
@@ -145,6 +149,9 @@ func (h *AdminHandler) CreateNotification(w http.ResponseWriter, r *http.Request
 		response.InternalError(w, err.Error())
 		return
 	}
+	h.adminService.RecordAudit(r.Context(), middleware.GetUserID(r.Context()), "notification.broadcast", "broadcast_notification", notif.ID.String(), map[string]interface{}{
+		"target": notif.Target, "type": notif.Type, "delivered_count": notif.DeliveredCount,
+	})
 
 	response.Success(w, http.StatusCreated, "push notification broadcast recorded successfully", notif)
 }
