@@ -142,11 +142,57 @@ func (s *LedgerService) GetExpense(ctx context.Context, id uuid.UUID) (*domain.E
 	return expense, nil
 }
 
+// GetUserExpense prevents an authenticated user from discovering another
+// person's ledger entry by UUID.
+func (s *LedgerService) GetUserExpense(ctx context.Context, userID, id uuid.UUID) (*domain.Expense, error) {
+	expense, err := s.GetExpense(ctx, id)
+	if err != nil || expense == nil || expense.UserID != userID {
+		return nil, ErrExpenseNotFound
+	}
+	return expense, nil
+}
+
+func (s *LedgerService) UpdateExpense(ctx context.Context, userID, id uuid.UUID, input CreateExpenseInput) (*domain.Expense, error) {
+	current, err := s.GetUserExpense(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if input.Amount <= 0 {
+		return nil, ErrInvalidAmount
+	}
+	if input.Date.IsZero() {
+		input.Date = current.Date
+	}
+
+	current.Amount = input.Amount
+	current.Category = input.Category
+	current.Merchant = input.Merchant
+	current.PaymentMethod = input.PaymentMethod
+	current.Note = input.Note
+	current.Date = input.Date
+	current.OutflowType = input.OutflowType
+	current.HouseholdID = input.HouseholdID
+	current.IsShared = input.OutflowType == domain.OutflowSharedHousehold
+	current.PersonalShare = input.Amount
+	current.RecoverableAmount = 0
+	if input.OutflowType == domain.OutflowRecoverable {
+		current.PersonalShare = 0
+		current.RecoverableAmount = input.Amount
+	}
+	if err := s.expenseRepo.Update(ctx, current); err != nil {
+		return nil, err
+	}
+	return current, nil
+}
+
 func (s *LedgerService) ListExpenses(ctx context.Context, filter domain.ExpenseFilter) ([]*domain.Expense, int, error) {
 	return s.expenseRepo.List(ctx, filter)
 }
 
-func (s *LedgerService) DeleteExpense(ctx context.Context, id uuid.UUID) error {
+func (s *LedgerService) DeleteExpense(ctx context.Context, userID, id uuid.UUID) error {
+	if _, err := s.GetUserExpense(ctx, userID, id); err != nil {
+		return err
+	}
 	return s.expenseRepo.Delete(ctx, id)
 }
 

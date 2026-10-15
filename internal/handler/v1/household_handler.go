@@ -98,6 +98,10 @@ func (h *HouseholdHandler) GetBalances(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, "invalid household id", nil)
 		return
 	}
+	if err := h.householdService.RequireMember(r.Context(), middleware.GetUserID(r.Context()), id); err != nil {
+		response.NotFound(w, "household not found")
+		return
+	}
 
 	balances, err := h.householdService.GetBalances(r.Context(), id)
 	if err != nil {
@@ -113,6 +117,10 @@ func (h *HouseholdHandler) GetOptimalSettlements(w http.ResponseWriter, r *http.
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		response.BadRequest(w, "invalid household id", nil)
+		return
+	}
+	if err := h.householdService.RequireMember(r.Context(), middleware.GetUserID(r.Context()), id); err != nil {
+		response.NotFound(w, "household not found")
 		return
 	}
 
@@ -140,6 +148,11 @@ func (h *HouseholdHandler) Settle(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Amount <= 0 {
 		response.BadRequest(w, "valid from_user_id, to_user_id, and amount are required", nil)
+		return
+	}
+	callerID := middleware.GetUserID(r.Context())
+	if body.FromUserID != callerID || h.householdService.RequireMember(r.Context(), callerID, householdID) != nil {
+		response.Forbidden(w, "you cannot record this settlement")
 		return
 	}
 

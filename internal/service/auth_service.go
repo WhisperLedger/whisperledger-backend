@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	ErrUserExists        = errors.New("a user with this email already exists")
-	ErrInvalidCreds     = errors.New("invalid email or password")
-	ErrUserNotFound     = errors.New("user not found")
-	ErrAccountInactive  = errors.New("user account is inactive")
+	ErrUserExists      = errors.New("a user with this email already exists")
+	ErrInvalidCreds    = errors.New("invalid email or password")
+	ErrUserNotFound    = errors.New("user not found")
+	ErrAccountInactive = errors.New("user account is inactive")
+	ErrMigrationReset  = errors.New("this migrated account must complete a verified password reset")
 )
 
 type RegisterInput struct {
@@ -55,25 +56,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*AuthR
 	}
 	if existing != nil {
 		if existing.PasswordHash == "$2a$10$realfirebaseuserhashplaceholdersalt" {
-			hashedPassword, err := hash.HashPassword(input.Password)
-			if err != nil {
-				return nil, err
-			}
-			existing.FullName = input.FullName
-			if input.PhoneNumber != nil {
-				existing.PhoneNumber = input.PhoneNumber
-			}
-			existing.PasswordHash = hashedPassword
-			_ = s.userRepo.UpdatePassword(ctx, existing.ID, hashedPassword)
-			_ = s.userRepo.Update(ctx, existing)
-			tokens, err := s.tokenMaker.GenerateTokenPair(existing)
-			if err != nil {
-				return nil, err
-			}
-			return &AuthResult{
-				User:   existing,
-				Tokens: tokens,
-			}, nil
+			return nil, ErrMigrationReset
 		}
 		return nil, ErrUserExists
 	}
@@ -123,12 +106,9 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*AuthResult,
 	}
 
 	if user.PasswordHash == "$2a$10$realfirebaseuserhashplaceholdersalt" {
-		hashedPassword, err := hash.HashPassword(input.Password)
-		if err == nil {
-			_ = s.userRepo.UpdatePassword(ctx, user.ID, hashedPassword)
-			user.PasswordHash = hashedPassword
-		}
-	} else if !hash.CheckPassword(input.Password, user.PasswordHash) {
+		return nil, ErrMigrationReset
+	}
+	if !hash.CheckPassword(input.Password, user.PasswordHash) {
 		return nil, ErrInvalidCreds
 	}
 
@@ -144,7 +124,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*AuthResult,
 }
 
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*token.TokenPair, error) {
-	claims, err := s.tokenMaker.ValidateToken(refreshToken)
+	claims, err := s.tokenMaker.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		return nil, err
 	}
@@ -175,72 +155,19 @@ func (s *AuthService) UpdatePushToken(ctx context.Context, userID uuid.UUID, pus
 	return s.userRepo.UpdatePushToken(ctx, userID, pushToken)
 }
 
-type SyncSessionInput struct {
-	Email     string  `json:"email"`
-	FullName  string  `json:"full_name"`
-	AvatarURL *string `json:"avatar_url"`
-}
-
-func (s *AuthService) SyncSession(ctx context.Context, input SyncSessionInput) (*AuthResult, error) {
-	email := strings.TrimSpace(strings.ToLower(input.Email))
-	if email == "" {
-		return nil, errors.New("email is required")
-	}
-
-	user, err := s.userRepo.GetByEmail(ctx, email)
+func (s *AuthService) UpdateProfile(ctx context.Context, userID uuid.UUID, fullName string, avatarURL *string) (*domain.User, error) {
+	user, err := s.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-
-	if user == nil {
-		placeholderHash, err := hash.HashPassword(uuid.New().String() + "-whisper-sync-salt")
-		if err != nil {
-			return nil, err
-		}
-		fullName := strings.TrimSpace(input.FullName)
-		if fullName == "" {
-			fullName = strings.Split(email, "@")[0]
-		}
-		user = &domain.User{
-			ID:           uuid.New(),
-			Email:        email,
-			PasswordHash: placeholderHash,
-			FullName:     fullName,
-			AvatarURL:    input.AvatarURL,
-			Role:         domain.RoleUser,
-			IsActive:     true,
-			Plan:         "starter_free",
-			Status:       "active",
-		}
-		if err := s.userRepo.Create(ctx, user); err != nil {
-			return nil, err
-		}
-	} else {
-		if !user.IsActive {
-			return nil, ErrAccountInactive
-		}
-		// Update profile details if newly provided
-		dirty := false
-		if strings.TrimSpace(input.FullName) != "" && user.FullName != strings.TrimSpace(input.FullName) {
-			user.FullName = strings.TrimSpace(input.FullName)
-			dirty = true
-		}
-		if input.AvatarURL != nil && (user.AvatarURL == nil || *user.AvatarURL != *input.AvatarURL) {
-			user.AvatarURL = input.AvatarURL
-			dirty = true
-		}
-		if dirty {
-			_ = s.userRepo.Update(ctx, user)
-		}
+	if name := strings.TrimSpace(fullName); name != "" {
+		user.FullName = name
 	}
-
-	tokens, err := s.tokenMaker.GenerateTokenPair(user)
-	if err != nil {
+	if avatarURL != nil {
+		user.AvatarURL = avatarURL
+	}
+	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, err
 	}
-
-	return &AuthResult{
-		User:   user,
-		Tokens: tokens,
-	}, nil
+	return user, nil
 }

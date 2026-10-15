@@ -42,10 +42,17 @@ func Load() (*Config, error) {
 	refreshExpiryDays, _ := strconv.Atoi(getEnv("JWT_REFRESH_EXPIRY_DAYS", "30"))
 
 	defaultOrigins := []string{
-		"http://localhost:3000",
-		"http://localhost:5173",
-		"https://whisperledger.com",
-		"https://admin.whisperledger.com",
+		"https://whisperledger.in",
+		"https://www.whisperledger.in",
+		"https://admin.whisperledger.in",
+	}
+	if env != "production" {
+		defaultOrigins = append(defaultOrigins,
+			"http://localhost:3000",
+			"http://localhost:3003",
+			"http://localhost:5173",
+			"http://localhost:5174",
+		)
 	}
 
 	if corsEnv := os.Getenv("CORS_ORIGINS"); corsEnv != "" {

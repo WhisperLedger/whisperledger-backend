@@ -19,6 +19,7 @@ type Claims struct {
 	Email       string      `json:"email"`
 	Role        domain.Role `json:"role"`
 	HouseholdID *uuid.UUID  `json:"household_id,omitempty"`
+	TokenUse    string      `json:"token_use"`
 	jwt.RegisteredClaims
 }
 
@@ -50,6 +51,7 @@ func (m *TokenMaker) GenerateTokenPair(user *domain.User) (*TokenPair, error) {
 		Email:       user.Email,
 		Role:        user.Role,
 		HouseholdID: user.HouseholdID,
+		TokenUse:    "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -65,7 +67,8 @@ func (m *TokenMaker) GenerateTokenPair(user *domain.User) (*TokenPair, error) {
 	}
 
 	refreshClaims := &Claims{
-		UserID: user.ID,
+		UserID:   user.ID,
+		TokenUse: "refresh",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -107,5 +110,15 @@ func (m *TokenMaker) ValidateToken(tokenStr string) (*Claims, error) {
 		return nil, ErrInvalidToken
 	}
 
+	return claims, nil
+}
+
+// ValidateRefreshToken makes refresh tokens non-interchangeable with short
+// lived access tokens. Calling /refresh with a bearer access token is rejected.
+func (m *TokenMaker) ValidateRefreshToken(tokenStr string) (*Claims, error) {
+	claims, err := m.ValidateToken(tokenStr)
+	if err != nil || claims.TokenUse != "refresh" {
+		return nil, ErrInvalidToken
+	}
 	return claims, nil
 }

@@ -26,6 +26,8 @@ type RouterConfig struct {
 	RecoveryHandler  *v1.RecoveryHandler
 	DetectiveHandler *v1.DetectiveHandler
 	AdminHandler     *v1.AdminHandler
+	InterestHandler  *v1.InterestHandler
+	ProductHandler   *v1.ProductHandler
 }
 
 func NewRouter(rc RouterConfig) http.Handler {
@@ -37,6 +39,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 	r.Use(middleware.RequestLogger(rc.Logger))
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.Timeout(30 * time.Second))
+	r.Use(middleware.SecurityHeaders)
 
 	// CORS
 	r.Use(cors.Handler(cors.Options{
@@ -62,17 +65,24 @@ func NewRouter(rc RouterConfig) http.Handler {
 
 	// API v1
 	r.Route("/api/v1", func(api chi.Router) {
+		// Public, consented product-notification signup. This is separate from
+		// account creation and intentionally has a narrow rate limit.
+		api.With(middleware.RateLimitByIP(5, time.Hour)).Post("/interest", rc.InterestHandler.Subscribe)
+
 		// Public Auth routes
 		api.Route("/auth", func(auth chi.Router) {
-			auth.Post("/register", rc.AuthHandler.Register)
-			auth.Post("/login", rc.AuthHandler.Login)
-			auth.Post("/refresh", rc.AuthHandler.Refresh)
-			auth.Post("/sync-session", rc.AuthHandler.SyncSession)
+			// Authentication endpoints are deliberately throttled separately from
+			// public product updates.  This is instance-local protection; deploy an
+			// edge/WAF rule as the second layer in production.
+			auth.With(middleware.RateLimitByIP(10, 15*time.Minute)).Post("/register", rc.AuthHandler.Register)
+			auth.With(middleware.RateLimitByIP(20, 15*time.Minute)).Post("/login", rc.AuthHandler.Login)
+			auth.With(middleware.RateLimitByIP(30, 15*time.Minute)).Post("/refresh", rc.AuthHandler.Refresh)
 
 			// Protected auth route
 			auth.Group(func(protected chi.Router) {
 				protected.Use(rc.AuthMiddleware.Authenticate)
 				protected.Get("/me", rc.AuthHandler.Me)
+				protected.Put("/me", rc.AuthHandler.UpdateProfile)
 				protected.Put("/push-token", rc.AuthHandler.UpdatePushToken)
 			})
 		})
@@ -84,6 +94,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 			// User Device & Profile
 			protected.Route("/users", func(users chi.Router) {
 				users.Put("/push-token", rc.AuthHandler.UpdatePushToken)
+				users.Post("/support-cases", rc.ProductHandler.CreateSupportCase)
 			})
 
 			// Expenses & 3-Way Outflow Ledger
@@ -92,6 +103,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 				exp.Get("/", rc.ExpenseHandler.List)
 				exp.Get("/summary", rc.ExpenseHandler.Summary)
 				exp.Get("/{id}", rc.ExpenseHandler.GetByID)
+				exp.Put("/{id}", rc.ExpenseHandler.Update)
 				exp.Delete("/{id}", rc.ExpenseHandler.Delete)
 			})
 
@@ -122,12 +134,15 @@ func NewRouter(rc RouterConfig) http.Handler {
 
 			// Platform administration & telemetry
 			protected.Route("/admin", func(admin chi.Router) {
+				// Household administrators are not platform operators.  Platform-wide
+				// financial data and broadcasts are restricted to this explicit role.
+				admin.Use(rc.AuthMiddleware.RequireRole(domain.RolePlatformAdmin))
 				admin.Get("/metrics", rc.AdminHandler.Metrics)
 				admin.Get("/telemetry", rc.AdminHandler.Telemetry)
-				admin.With(rc.AuthMiddleware.RequireRole(domain.RolePlatformAdmin, domain.RoleHouseholdAdmin)).Get("/users", rc.AdminHandler.Users)
-				admin.With(rc.AuthMiddleware.RequireRole(domain.RolePlatformAdmin, domain.RoleHouseholdAdmin)).Patch("/users/{id}/subscription", rc.AdminHandler.UpdateSubscription)
-				admin.With(rc.AuthMiddleware.RequireRole(domain.RolePlatformAdmin, domain.RoleHouseholdAdmin)).Post("/notifications", rc.AdminHandler.CreateNotification)
-				admin.With(rc.AuthMiddleware.RequireRole(domain.RolePlatformAdmin, domain.RoleHouseholdAdmin)).Get("/notifications", rc.AdminHandler.ListNotifications)
+				admin.Get("/users", rc.AdminHandler.Users)
+				admin.Patch("/users/{id}/subscription", rc.AdminHandler.UpdateSubscription)
+				admin.Post("/notifications", rc.AdminHandler.CreateNotification)
+				admin.Get("/notifications", rc.AdminHandler.ListNotifications)
 			})
 		})
 	})
