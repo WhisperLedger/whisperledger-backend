@@ -1,0 +1,22 @@
+[
+  {
+    "id": "DQCYZW",
+    "name": "Tanmay Agarwal",
+    "currency": "INR",
+    "inviteCode": "DQCYZW",
+    "createdBy": "gXZ74RNEzqfBQVpYnWVCqgQu3dE2",
+    "members": [],
+    "createdAt": 1788382712974
+  },
+  {
+    "id": "EDDLF5",
+    "name": "Haveli",
+    "currency": "INR",
+    "inviteCode": "EDDLF5",
+    "createdBy": "olvFqt1NA2XMABCDVk7lJMIIlu22",
+    "members": [
+      "gXZ74RNEzqfBQVpYnWVCqgQu3dE2"
+    ],
+    "createdAt": 1788296987005
+  }
+]

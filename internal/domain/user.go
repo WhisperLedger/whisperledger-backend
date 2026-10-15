@@ -34,18 +34,22 @@ type User struct {
 }
 
 type BroadcastNotification struct {
-	ID             uuid.UUID  `json:"id"`
-	AppName        string     `json:"app_name"`
-	Title          string     `json:"title"`
-	Body           string     `json:"body"`
-	ImageURL       string     `json:"image_url"`
-	Target         string     `json:"target"`
-	TargetUserID   *uuid.UUID `json:"target_user_id,omitempty"`
-	Type           string     `json:"type"`
-	DeliveredCount int        `json:"delivered_count"`
-	DispatchStatus string     `json:"dispatch_status"`
-	SentAt         time.Time  `json:"sent_at"`
-	CreatedAt      time.Time  `json:"created_at"`
+	ID           uuid.UUID  `json:"id"`
+	AppName      string     `json:"app_name"`
+	Title        string     `json:"title"`
+	Body         string     `json:"body"`
+	ImageURL     string     `json:"image_url"`
+	Target       string     `json:"target"`
+	TargetUserID *uuid.UUID `json:"target_user_id,omitempty"`
+	// TargetUserIDs is only used while dispatching a selected-user broadcast.
+	// The history table stores the audience type and server-calculated recipient
+	// count, never an unbounded copy of user identifiers.
+	TargetUserIDs  []uuid.UUID `json:"target_user_ids,omitempty"`
+	Type           string      `json:"type"`
+	DeliveredCount int         `json:"delivered_count"`
+	DispatchStatus string      `json:"dispatch_status"`
+	SentAt         time.Time   `json:"sent_at"`
+	CreatedAt      time.Time   `json:"created_at"`
 }
 
 type UserRepository interface {
