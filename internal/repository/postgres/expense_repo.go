@@ -184,6 +184,9 @@ func (r *ExpenseRepository) List(ctx context.Context, filter domain.ExpenseFilte
 	defer rows.Close()
 
 	var expenses []*domain.Expense
+	var sharedIDs []uuid.UUID
+	expenseMap := make(map[uuid.UUID]*domain.Expense)
+
 	for rows.Next() {
 		var e domain.Expense
 		if err := rows.Scan(
@@ -193,6 +196,30 @@ func (r *ExpenseRepository) List(ctx context.Context, filter domain.ExpenseFilte
 			return nil, 0, err
 		}
 		expenses = append(expenses, &e)
+		if e.IsShared {
+			sharedIDs = append(sharedIDs, e.ID)
+			expenseMap[e.ID] = &e
+		}
+	}
+
+	if len(sharedIDs) > 0 {
+		splitsQuery := `
+			SELECT id, expense_id, user_id, amount, is_settled, created_at
+			FROM expense_splits
+			WHERE expense_id = ANY($1)
+		`
+		sRows, err := r.pool.Query(ctx, splitsQuery, sharedIDs)
+		if err == nil {
+			defer sRows.Close()
+			for sRows.Next() {
+				var s domain.ExpenseSplit
+				if err := sRows.Scan(&s.ID, &s.ExpenseID, &s.UserID, &s.Amount, &s.IsSettled, &s.CreatedAt); err == nil {
+					if targetExp, ok := expenseMap[s.ExpenseID]; ok {
+						targetExp.Splits = append(targetExp.Splits, s)
+					}
+				}
+			}
+		}
 	}
 
 	return expenses, total, nil
