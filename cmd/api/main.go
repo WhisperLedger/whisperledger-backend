@@ -69,7 +69,7 @@ func main() {
 
 	// Services
 	authService := service.NewAuthService(userRepo, tokenMaker, cfg.GoogleOAuthClientID, cfg.FirebaseProjectID)
-	ledgerService := service.NewLedgerService(expenseRepo, householdRepo)
+	ledgerService := service.NewLedgerService(expenseRepo, householdRepo, userRepo)
 	householdService := service.NewHouseholdService(householdRepo, userRepo)
 	recoveryService := service.NewRecoveryService(receivableRepo)
 	detectiveService := service.NewDetectiveService(expenseRepo, receivableRepo, householdRepo)

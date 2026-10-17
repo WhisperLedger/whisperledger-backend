@@ -1,13 +1,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
+	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"whisperledger-backend/internal/domain"
@@ -209,5 +214,79 @@ func (s *HouseholdService) SettleDebt(ctx context.Context, householdID, fromUser
 	if amount <= 0 {
 		return ErrInvalidAmount
 	}
-	return s.householdRepo.RecordSettlement(ctx, householdID, fromUser, toUser, amount)
+	if err := s.householdRepo.RecordSettlement(ctx, householdID, fromUser, toUser, amount); err != nil {
+		return err
+	}
+	go s.notifySettlement(householdID, fromUser, toUser, amount)
+	return nil
+}
+
+func (s *HouseholdService) notifySettlement(householdID, fromUser, toUser uuid.UUID, amount float64) {
+	if s.userRepo == nil || s.householdRepo == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	household, _ := s.householdRepo.GetByID(ctx, householdID)
+	householdName := "Your flat"
+	if household != nil && household.Name != "" {
+		householdName = household.Name
+	}
+
+	payer, _ := s.userRepo.GetByID(ctx, fromUser)
+	payerName := "A flatmate"
+	if payer != nil && payer.FullName != "" {
+		payerName = payer.FullName
+	}
+
+	recipient, err := s.userRepo.GetByID(ctx, toUser)
+	if err != nil || recipient == nil || recipient.PushToken == nil || *recipient.PushToken == "" {
+		return
+	}
+	token := strings.TrimSpace(*recipient.PushToken)
+	if token == "" {
+		return
+	}
+
+	type expoPushMessage struct {
+		To        string                 `json:"to"`
+		Title     string                 `json:"title"`
+		Body      string                 `json:"body"`
+		Sound     string                 `json:"sound"`
+		Priority  string                 `json:"priority"`
+		ChannelID string                 `json:"channelId"`
+		Data      map[string]interface{} `json:"data,omitempty"`
+	}
+
+	msg := expoPushMessage{
+		To:        token,
+		Title:     "✅ Flatmate Settle Up",
+		Body:      fmt.Sprintf("%s recorded a settlement of ₹%.0f with you in %s.", payerName, amount, householdName),
+		Sound:     "default",
+		Priority:  "high",
+		ChannelID: "default",
+		Data: map[string]interface{}{
+			"type":         "settle_up",
+			"household_id": householdID.String(),
+		},
+	}
+
+	payload, err := json.Marshal([]expoPushMessage{msg})
+	if err != nil {
+		return
+	}
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://exp.host/--/api/v2/push/send", bytes.NewBuffer(payload))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
 }
