@@ -117,6 +117,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 				hh.Get("/{id}/balances", rc.HouseholdHandler.GetBalances)
 				hh.Get("/{id}/settlements", rc.HouseholdHandler.GetOptimalSettlements)
 				hh.Post("/{id}/settle", rc.HouseholdHandler.Settle)
+				hh.Post("/{id}/leave", rc.HouseholdHandler.Leave)
 			})
 
 			// Money Recovery Engine

@@ -115,13 +115,13 @@ func (r *ExpenseRepository) List(ctx context.Context, filter domain.ExpenseFilte
 	var args []interface{}
 	idx := 1
 
-	conditions = append(conditions, fmt.Sprintf("user_id = $%d", idx))
-	args = append(args, filter.UserID)
-	idx++
-
 	if filter.HouseholdID != nil {
 		conditions = append(conditions, fmt.Sprintf("household_id = $%d", idx))
 		args = append(args, *filter.HouseholdID)
+		idx++
+	} else {
+		conditions = append(conditions, fmt.Sprintf("user_id = $%d", idx))
+		args = append(args, filter.UserID)
 		idx++
 	}
 
