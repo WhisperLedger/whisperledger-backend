@@ -1,0 +1,3 @@
+ALTER TABLE expenses DROP COLUMN IF EXISTS location;
+ALTER TABLE expenses DROP COLUMN IF EXISTS latitude;
+ALTER TABLE expenses DROP COLUMN IF EXISTS longitude;

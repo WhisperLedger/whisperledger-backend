@@ -36,12 +36,12 @@ func (r *ExpenseRepository) Create(ctx context.Context, e *domain.Expense) error
 	e.UpdatedAt = now
 
 	expenseQuery := `
-		INSERT INTO expenses (id, user_id, household_id, outflow_type, amount, personal_share, recoverable_amount, category, merchant, payment_method, note, date, is_shared, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		INSERT INTO expenses (id, user_id, household_id, outflow_type, amount, personal_share, recoverable_amount, category, merchant, payment_method, note, location, latitude, longitude, date, is_shared, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 	`
 	_, err = tx.Exec(ctx, expenseQuery,
 		e.ID, e.UserID, e.HouseholdID, e.OutflowType, e.Amount, e.PersonalShare, e.RecoverableAmount,
-		e.Category, e.Merchant, e.PaymentMethod, e.Note, e.Date, e.IsShared, e.CreatedAt, e.UpdatedAt,
+		e.Category, e.Merchant, e.PaymentMethod, e.Note, e.Location, e.Latitude, e.Longitude, e.Date, e.IsShared, e.CreatedAt, e.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert expense: %w", err)
@@ -72,14 +72,14 @@ func (r *ExpenseRepository) Create(ctx context.Context, e *domain.Expense) error
 
 func (r *ExpenseRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Expense, error) {
 	query := `
-		SELECT id, user_id, household_id, outflow_type, amount, personal_share, recoverable_amount, category, merchant, payment_method, note, date, is_shared, created_at, updated_at
+		SELECT id, user_id, household_id, outflow_type, amount, personal_share, recoverable_amount, category, merchant, payment_method, note, location, latitude, longitude, date, is_shared, created_at, updated_at
 		FROM expenses
 		WHERE id = $1
 	`
 	var e domain.Expense
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&e.ID, &e.UserID, &e.HouseholdID, &e.OutflowType, &e.Amount, &e.PersonalShare, &e.RecoverableAmount,
-		&e.Category, &e.Merchant, &e.PaymentMethod, &e.Note, &e.Date, &e.IsShared, &e.CreatedAt, &e.UpdatedAt,
+		&e.Category, &e.Merchant, &e.PaymentMethod, &e.Note, &e.Location, &e.Latitude, &e.Longitude, &e.Date, &e.IsShared, &e.CreatedAt, &e.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -169,7 +169,7 @@ func (r *ExpenseRepository) List(ctx context.Context, filter domain.ExpenseFilte
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, user_id, household_id, outflow_type, amount, personal_share, recoverable_amount, category, merchant, payment_method, note, date, is_shared, created_at, updated_at
+		SELECT id, user_id, household_id, outflow_type, amount, personal_share, recoverable_amount, category, merchant, payment_method, note, location, latitude, longitude, date, is_shared, created_at, updated_at
 		FROM expenses
 		WHERE %s
 		ORDER BY date DESC
@@ -188,7 +188,7 @@ func (r *ExpenseRepository) List(ctx context.Context, filter domain.ExpenseFilte
 		var e domain.Expense
 		if err := rows.Scan(
 			&e.ID, &e.UserID, &e.HouseholdID, &e.OutflowType, &e.Amount, &e.PersonalShare, &e.RecoverableAmount,
-			&e.Category, &e.Merchant, &e.PaymentMethod, &e.Note, &e.Date, &e.IsShared, &e.CreatedAt, &e.UpdatedAt,
+			&e.Category, &e.Merchant, &e.PaymentMethod, &e.Note, &e.Location, &e.Latitude, &e.Longitude, &e.Date, &e.IsShared, &e.CreatedAt, &e.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -201,12 +201,12 @@ func (r *ExpenseRepository) List(ctx context.Context, filter domain.ExpenseFilte
 func (r *ExpenseRepository) Update(ctx context.Context, e *domain.Expense) error {
 	query := `
 		UPDATE expenses
-		SET amount = $1, personal_share = $2, recoverable_amount = $3, category = $4, merchant = $5, payment_method = $6, note = $7, date = $8, outflow_type = $9, is_shared = $10, updated_at = $11
-		WHERE id = $12 AND user_id = $13
+		SET amount = $1, personal_share = $2, recoverable_amount = $3, category = $4, merchant = $5, payment_method = $6, note = $7, location = $8, latitude = $9, longitude = $10, date = $11, outflow_type = $12, is_shared = $13, updated_at = $14
+		WHERE id = $15 AND user_id = $16
 	`
 	e.UpdatedAt = time.Now().UTC()
 	_, err := r.pool.Exec(ctx, query,
-		e.Amount, e.PersonalShare, e.RecoverableAmount, e.Category, e.Merchant, e.PaymentMethod, e.Note, e.Date, e.OutflowType, e.IsShared, e.UpdatedAt, e.ID, e.UserID,
+		e.Amount, e.PersonalShare, e.RecoverableAmount, e.Category, e.Merchant, e.PaymentMethod, e.Note, e.Location, e.Latitude, e.Longitude, e.Date, e.OutflowType, e.IsShared, e.UpdatedAt, e.ID, e.UserID,
 	)
 	return err
 }

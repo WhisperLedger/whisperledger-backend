@@ -68,7 +68,7 @@ func main() {
 	interestRepo := postgres.NewInterestRepository(dbPool)
 
 	// Services
-	authService := service.NewAuthService(userRepo, tokenMaker, cfg.GoogleOAuthClientID)
+	authService := service.NewAuthService(userRepo, tokenMaker, cfg.GoogleOAuthClientID, cfg.FirebaseProjectID)
 	ledgerService := service.NewLedgerService(expenseRepo, householdRepo)
 	householdService := service.NewHouseholdService(householdRepo, userRepo)
 	recoveryService := service.NewRecoveryService(receivableRepo)

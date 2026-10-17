@@ -60,7 +60,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.authService.Login(r.Context(), input)
 	if err != nil {
-		if err == service.ErrInvalidCreds || err == service.ErrAccountInactive || err == service.ErrMigrationReset {
+		if err == service.ErrMigrationReset {
+			response.Error(w, http.StatusConflict, "MIGRATION_PASSWORD_RESET_REQUIRED", err.Error(), nil)
+			return
+		}
+		if err == service.ErrInvalidCreds || err == service.ErrAccountInactive {
 			response.Unauthorized(w, err.Error())
 			return
 		}
@@ -85,12 +89,34 @@ func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 			response.Unauthorized(w, err.Error())
 		case service.ErrGoogleAccountLinkRequired:
 			response.Error(w, http.StatusConflict, "GOOGLE_ACCOUNT_LINK_REQUIRED", err.Error(), nil)
+		case service.ErrAdminAccountAppSignIn:
+			response.Error(w, http.StatusConflict, "ADMIN_ACCOUNT_APP_SIGNIN_NOT_ALLOWED", err.Error(), nil)
 		default:
 			response.InternalError(w, "could not complete Google sign-in")
 		}
 		return
 	}
 	response.Success(w, http.StatusOK, "Google sign-in successful", result)
+}
+
+func (h *AuthHandler) LegacyFirebaseLogin(w http.ResponseWriter, r *http.Request) {
+	var input service.FirebaseMigrationLoginInput
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10)).Decode(&input); err != nil || input.IDToken == "" {
+		response.BadRequest(w, "a legacy identity token is required", nil)
+		return
+	}
+
+	result, err := h.authService.LegacyFirebaseLogin(r.Context(), input)
+	if err != nil {
+		switch err {
+		case service.ErrLegacyIdentityInvalid, service.ErrLegacyAccountUnavailable:
+			response.Unauthorized(w, "legacy account verification could not be completed")
+		default:
+			response.InternalError(w, "could not complete legacy account migration")
+		}
+		return
+	}
+	response.Success(w, http.StatusOK, "legacy account migrated", result)
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {

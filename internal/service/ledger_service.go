@@ -22,6 +22,9 @@ type CreateExpenseInput struct {
 	Merchant      string                 `json:"merchant"`
 	PaymentMethod string                 `json:"payment_method"`
 	Note          *string                `json:"note,omitempty"`
+	Location      *string                `json:"location,omitempty"`
+	Latitude      *float64               `json:"latitude,omitempty"`
+	Longitude     *float64               `json:"longitude,omitempty"`
 	Date          time.Time              `json:"date"`
 	Splits        []SplitInput           `json:"splits,omitempty"`
 }
@@ -62,6 +65,9 @@ func (s *LedgerService) CreateExpense(ctx context.Context, userID uuid.UUID, inp
 		Merchant:      input.Merchant,
 		PaymentMethod: input.PaymentMethod,
 		Note:          input.Note,
+		Location:      input.Location,
+		Latitude:      input.Latitude,
+		Longitude:     input.Longitude,
 		Date:          input.Date,
 	}
 
@@ -169,6 +175,9 @@ func (s *LedgerService) UpdateExpense(ctx context.Context, userID, id uuid.UUID,
 	current.Merchant = input.Merchant
 	current.PaymentMethod = input.PaymentMethod
 	current.Note = input.Note
+	current.Location = input.Location
+	current.Latitude = input.Latitude
+	current.Longitude = input.Longitude
 	current.Date = input.Date
 	current.OutflowType = input.OutflowType
 	current.HouseholdID = input.HouseholdID
