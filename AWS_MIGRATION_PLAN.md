@@ -27,27 +27,32 @@ be retained with only an ECS port mapping change.
 
 ## Recommended target architecture
 
-Deploy into `ap-south-1` unless latency, residency, or the current database
-region requires another region.
+The currently authorised AWS account is on the new AWS experience and is
+assigned to Sydney, `ap-southeast-2`. Keep this migration in Sydney while
+using its included credits; Mumbai (`ap-south-1`) is unavailable unless the
+account plan is upgraded and advanced features are activated. The initial
+production target is a single ARM64 EC2 host running Docker and Caddy, with
+ECR for immutable API images; ECS/Fargate remains the scale-out option after
+the credit-constrained rollout is proven.
 
 ```text
 Internet
   -> Route 53 / existing DNS
-  -> ACM certificate + Application Load Balancer
-  -> ECS Fargate service (Go API, private subnets)
-  -> RDS PostgreSQL (private subnets)
+  -> Caddy (TLS) on EC2 t4g.small
+  -> Dockerized Go API
+  -> Existing Neon PostgreSQL over TLS
 
-ECR <- CI build
-ECS one-off migration task <- CI release gate
-Secrets Manager -> ECS task execution role
-CloudWatch Logs, alarms, and dashboards <- ALB / ECS / RDS
+ECR <- GitHub Actions CI build via OIDC
+AWS Systems Manager <- CI deploy command -> EC2 host
+Secrets Manager -> EC2 instance role -> Docker runtime configuration
+CloudWatch Logs, alarms, and dashboards <- EC2 / ECR
 ```
 
 Use separate AWS accounts or, at minimum, isolated VPCs and IAM roles for
 staging and production. Store `DATABASE_URL`, `JWT_SECRET`, CORS origins, and
-WhatsApp credentials in Secrets Manager. Inject secrets at task start through
-the ECS task definition; do not put them in CI variables, task-definition
-plaintext environment values, or mobile bundles.
+WhatsApp credentials in Secrets Manager. Inject them onto the host through an
+instance role; do not put them in CI variables, plaintext compose files, or
+mobile bundles.
 
 ## Required decisions before provisioning
 

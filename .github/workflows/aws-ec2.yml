@@ -11,7 +11,9 @@ permissions:
   id-token: write
 
 env:
-  AWS_REGION: ap-south-1
+  # This AWS account's included-credit plan is currently assigned to Sydney.
+  # Do not change this to another region without upgrading/activating it first.
+  AWS_REGION: ap-southeast-2
   ECR_REPOSITORY: whisperledger-api
 
 jobs:
@@ -46,8 +48,7 @@ jobs:
         run: |
           docker buildx create --use
           docker buildx build --platform linux/arm64 --push \
-            --tag "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-            --tag "$REGISTRY/$ECR_REPOSITORY:latest" .
+            --tag "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
       - name: Deploy through AWS Systems Manager
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
