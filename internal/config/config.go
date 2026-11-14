@@ -19,6 +19,7 @@ type Config struct {
 	AccessTokenExpiry   time.Duration
 	RefreshTokenExpiry  time.Duration
 	GoogleOAuthClientID string
+	FirebaseProjectID   string
 
 	AllowedOrigins []string
 }
@@ -82,6 +83,7 @@ func Load() (*Config, error) {
 		AccessTokenExpiry:   time.Duration(accessExpiryHours) * time.Hour,
 		RefreshTokenExpiry:  time.Duration(refreshExpiryDays) * 24 * time.Hour,
 		GoogleOAuthClientID: getEnv("GOOGLE_OAUTH_CLIENT_ID", "1064792050841-amo41uudlpvmuoou362ijcktfe198hdr.apps.googleusercontent.com"),
+		FirebaseProjectID:   getEnv("FIREBASE_PROJECT_ID", "whisperledger-94715"),
 		AllowedOrigins:      defaultOrigins,
 	}, nil
 }

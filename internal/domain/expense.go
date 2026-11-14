@@ -51,6 +51,9 @@ type Expense struct {
 	Merchant          string          `json:"merchant"`
 	PaymentMethod     string          `json:"payment_method"`
 	Note              *string         `json:"note,omitempty"`
+	Location          *string         `json:"location,omitempty"`
+	Latitude          *float64        `json:"latitude,omitempty"`
+	Longitude         *float64        `json:"longitude,omitempty"`
 	Date              time.Time       `json:"date"`
 	IsShared          bool            `json:"is_shared"`
 	Splits            []ExpenseSplit  `json:"splits,omitempty"`

@@ -21,8 +21,8 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	query := `
-		INSERT INTO users (id, email, password_hash, full_name, phone_number, avatar_url, google_subject, role, is_active, household_id, plan, status, push_ready, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		INSERT INTO users (id, email, password_hash, full_name, phone_number, avatar_url, google_subject, firebase_subject, role, is_active, household_id, plan, status, push_ready, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`
 	now := time.Now().UTC()
 	if u.ID == uuid.Nil {
@@ -38,7 +38,7 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	u.UpdatedAt = now
 
 	_, err := r.pool.Exec(ctx, query,
-		u.ID, u.Email, u.PasswordHash, u.FullName, u.PhoneNumber, u.AvatarURL, u.GoogleSubject,
+		u.ID, u.Email, u.PasswordHash, u.FullName, u.PhoneNumber, u.AvatarURL, u.GoogleSubject, u.FirebaseSubject,
 		u.Role, u.IsActive, u.HouseholdID, u.Plan, u.Status, u.PushReady, u.CreatedAt, u.UpdatedAt,
 	)
 	return err
@@ -46,7 +46,7 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, role, is_active, household_id,
+		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, firebase_subject, role, is_active, household_id,
 		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
 		       created_at, updated_at
 		FROM users
@@ -54,7 +54,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 	`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject,
+		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject, &u.FirebaseSubject,
 		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -69,7 +69,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, role, is_active, household_id,
+		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, firebase_subject, role, is_active, household_id,
 		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
 		       created_at, updated_at
 		FROM users
@@ -77,7 +77,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, email).Scan(
-		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject,
+		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject, &u.FirebaseSubject,
 		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -92,7 +92,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 
 func (r *UserRepository) GetByGoogleSubject(ctx context.Context, subject string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, role, is_active, household_id,
+		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, firebase_subject, role, is_active, household_id,
 		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
 		       created_at, updated_at
 		FROM users
@@ -100,7 +100,7 @@ func (r *UserRepository) GetByGoogleSubject(ctx context.Context, subject string)
 	`
 	var u domain.User
 	err := r.pool.QueryRow(ctx, query, subject).Scan(
-		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject,
+		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject, &u.FirebaseSubject,
 		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -111,6 +111,65 @@ func (r *UserRepository) GetByGoogleSubject(ctx context.Context, subject string)
 		return nil, err
 	}
 	return &u, nil
+}
+
+// LinkGoogleSubject records a verified Google subject for a specific account.
+// The Google subject remains globally unique at the database level, so it can
+// never be attached to two accounts. Legacy-account reconciliation may replace
+// a stale subject on that same account after Google has re-verified its email.
+func (r *UserRepository) LinkGoogleSubject(ctx context.Context, id uuid.UUID, subject string) error {
+	query := `
+		UPDATE users
+		SET google_subject = $1, updated_at = $2
+		WHERE id = $3
+	`
+	result, err := r.pool.Exec(ctx, query, subject, time.Now().UTC(), id)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() != 1 {
+		return errors.New("user account was not found")
+	}
+	return nil
+}
+
+func (r *UserRepository) GetByFirebaseSubject(ctx context.Context, subject string) (*domain.User, error) {
+	query := `
+		SELECT id, email, password_hash, full_name, phone_number, avatar_url, google_subject, firebase_subject, role, is_active, household_id,
+		       COALESCE(plan, 'starter_free'), COALESCE(status, 'active'), push_token, COALESCE(push_ready, false),
+		       created_at, updated_at
+		FROM users
+		WHERE firebase_subject = $1
+	`
+	var u domain.User
+	err := r.pool.QueryRow(ctx, query, subject).Scan(
+		&u.ID, &u.Email, &u.PasswordHash, &u.FullName, &u.PhoneNumber, &u.AvatarURL, &u.GoogleSubject, &u.FirebaseSubject,
+		&u.Role, &u.IsActive, &u.HouseholdID, &u.Plan, &u.Status, &u.PushToken, &u.PushReady,
+		&u.CreatedAt, &u.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *UserRepository) LinkFirebaseSubject(ctx context.Context, id uuid.UUID, subject string) error {
+	query := `
+		UPDATE users
+		SET firebase_subject = $1, updated_at = $2
+		WHERE id = $3 AND (firebase_subject IS NULL OR firebase_subject = $1)
+	`
+	result, err := r.pool.Exec(ctx, query, subject, time.Now().UTC(), id)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() != 1 {
+		return errors.New("Firebase identity is already linked to a different account")
+	}
+	return nil
 }
 
 func (r *UserRepository) Update(ctx context.Context, u *domain.User) error {

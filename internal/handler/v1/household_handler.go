@@ -151,7 +151,7 @@ func (h *HouseholdHandler) Settle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	callerID := middleware.GetUserID(r.Context())
-	if body.FromUserID != callerID || h.householdService.RequireMember(r.Context(), callerID, householdID) != nil {
+	if (body.FromUserID != callerID && body.ToUserID != callerID) || h.householdService.RequireMember(r.Context(), callerID, householdID) != nil {
 		response.Forbidden(w, "you cannot record this settlement")
 		return
 	}
@@ -162,4 +162,19 @@ func (h *HouseholdHandler) Settle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, "settlement recorded successfully", nil)
+}
+
+func (h *HouseholdHandler) Leave(w http.ResponseWriter, r *http.Request) {
+	householdIDStr := chi.URLParam(r, "id")
+	householdID, err := uuid.Parse(householdIDStr)
+	if err != nil {
+		response.BadRequest(w, "invalid household id", nil)
+		return
+	}
+	callerID := middleware.GetUserID(r.Context())
+	if err := h.householdService.LeaveHousehold(r.Context(), callerID, householdID); err != nil {
+		response.InternalError(w, err.Error())
+		return
+	}
+	response.Success(w, http.StatusOK, "left household successfully", nil)
 }

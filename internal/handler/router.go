@@ -77,6 +77,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 			auth.With(middleware.RateLimitByIP(10, 15*time.Minute)).Post("/register", rc.AuthHandler.Register)
 			auth.With(middleware.RateLimitByIP(20, 15*time.Minute)).Post("/login", rc.AuthHandler.Login)
 			auth.With(middleware.RateLimitByIP(20, 15*time.Minute)).Post("/google", rc.AuthHandler.GoogleLogin)
+			auth.With(middleware.RateLimitByIP(10, 15*time.Minute)).Post("/legacy-firebase", rc.AuthHandler.LegacyFirebaseLogin)
 			auth.With(middleware.RateLimitByIP(30, 15*time.Minute)).Post("/refresh", rc.AuthHandler.Refresh)
 
 			// Protected auth route
@@ -116,6 +117,7 @@ func NewRouter(rc RouterConfig) http.Handler {
 				hh.Get("/{id}/balances", rc.HouseholdHandler.GetBalances)
 				hh.Get("/{id}/settlements", rc.HouseholdHandler.GetOptimalSettlements)
 				hh.Post("/{id}/settle", rc.HouseholdHandler.Settle)
+				hh.Post("/{id}/leave", rc.HouseholdHandler.Leave)
 			})
 
 			// Money Recovery Engine
